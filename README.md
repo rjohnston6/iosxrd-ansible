@@ -15,14 +15,15 @@ structured host and group variables.
 2. Install the required Ansible collections into the ignored local collection
   directory with `make collections`.
 3. Enable the Git commit hooks with `make pre-commit-install`.
-4. Update `inventories/example/hosts.yaml` with your device addresses and the
+4. Update `inventories/example/hosts.yaml` with your device address and the
   model variables under `inventories/example/group_vars/` and `host_vars/`.
-5. Run `make syntax-check` to validate the playbook, then run it against
-   reachable devices with `ansible-playbook playbooks/site.yaml`.
+5. Run `make syntax-check` to validate the playbook, then run it against the
+  reachable device with `ansible-playbook playbooks/site.yaml --ask-pass`.
 
-The example inventory uses the documentation-only address `192.0.2.10`. Replace
-it before running the playbook. Credentials should be supplied through Ansible
-Vault or an external secrets provider, not committed to inventory files.
+The example targets the CML test device `ix-pop` at `198.18.191.1`. Change the
+address when using a different device. The inventory includes the non-secret
+SSH username; supply passwords through the interactive prompt, Ansible Vault,
+or an external secrets provider, not in inventory files.
 
 ## Data model and roles
 
@@ -36,24 +37,23 @@ inventories/example/
   hosts.yaml
   group_vars/
     all.yaml
-    provider_mtc.yaml
-    region_mtc_canada.yaml
+    provider_ix_pop.yaml
   host_vars/
-    edge01.yaml
+    ix-pop.yaml
 ```
 
 `playbooks/site.yaml` combines the model in this order: global defaults,
-provider, region, then device. Nested mappings merge recursively; lists replace
-the inherited list. In the example, Canada's NTP server list replaces MTC's
-list, which replaces the global default. A feature role consumes only the
-resulting `iosxr_effective_model`, not the hierarchy it came from.
+provider, optional region, then device. Nested mappings merge recursively;
+lists replace the inherited list. In the example, the provider NTP server list
+replaces the global default. A feature role consumes only the resulting
+`iosxr_effective_model`, not the hierarchy it came from.
 For example, banners declared in `group_vars/all.yaml` apply by default to all
 devices. If a provider, region, or device defines its own `banners` list, that
 list replaces the inherited list rather than appending to it.
 
-The example includes `iosxr_system` and `iosxr_ntp` roles. The system role
-applies modeled hostnames and banners; the device example includes login and
-MOTD banners.
+The example includes `iosxr_system`, `iosxr_l3_interfaces`, and `iosxr_ntp`
+roles. The system role applies the modeled hostname and banners; the device
+example includes login and MOTD banners.
 The `iosxr_l3_interfaces` role consumes a list of named interfaces. Each entry
 can define IPv4 addresses, IPv6 addresses, or both; the same structure applies
 to physical interfaces and loopbacks. Interface descriptions and Ethernet MTU
@@ -67,39 +67,36 @@ models both address families and descriptions on a physical interface and
 ```yaml
 interfaces:
   - name: GigabitEthernet0/0/0/1
-    description: Example dual-stack physical interface
+    description: << To mtc-core-02 gi0/0/0/2 >>
     enabled: true
-    mtu: 9000
+    mtu: 1500
   - name: Loopback0
-    description: Example dual-stack loopback
+    description: << Router ID >>
     enabled: true
 l3_interfaces:
   - name: GigabitEthernet0/0/0/1
     ipv4:
-      - address: 192.0.2.2/24
+      - address: 198.19.1.0/31
     ipv6:
-      - address: 2001:db8:100::2/64
+      - address: 2001:db8:5555:2000::1/64
   - name: Loopback0
     ipv4:
-      - address: 192.0.2.1/32
+      - address: 198.19.0.1/31
     ipv6:
-      - address: 2001:db8:100::1/128
+      - address: 2001:db8:5555::1/128
 ```
 
 ### Stage 1 validation
 
 The interface roles were applied to the IOS XRd 26.1.1 test device `ix-pop`.
-`GigabitEthernet0/0/0/1` was enabled with MTU 1500, IPv4 `198.19.1.0/31`, and
-IPv6 `2001:db8:5555:2000::1/64`. `Loopback0` was configured with IPv4
-`198.19.0.1/31` and IPv6 `2001:db8:5555::1/128`. Both interfaces reported
-`up/up`, the running configuration matched the requested descriptions and
-addresses, and a subsequent L3 merge reported no changes.
+Both modeled interfaces reported `up/up`; the running configuration matched
+the model, and a subsequent L3 merge reported no changes.
 
 The NTP role applies the effective structured server list with
 `cisco.iosxr.iosxr_ntp_global` in `merged` state. It checks `show version` and
 skips NTP on IOS XRd, where the NTP CLI is not available on the test image. The
-Canada example configures `198.18.128.1` through VRF
-`management`. The `vrf` property is optional and belongs to each server entry:
+ix-pop provider model specifies `198.18.128.1` through VRF `management`. The
+`vrf` property is optional and belongs to each server entry:
 use the exact VRF name configured on the device (for example, `mgmt`), or omit
 `vrf` to configure the server in the global routing table. The role passes
 these entries directly to the collection module. For example:

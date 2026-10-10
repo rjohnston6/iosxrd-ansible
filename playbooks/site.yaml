@@ -1,6 +1,6 @@
 ---
 - name: Configure IOS-XR devices
-  hosts: provider_mtc
+  hosts: provider_ix_pop
   gather_facts: false
   vars:
     iosxr_effective_model: >-

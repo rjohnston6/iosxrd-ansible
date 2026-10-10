@@ -5,5 +5,5 @@ iosxr_model_provider:
       configuration:
         ntp:
           servers:
-            - server: 198.51.100.10
-            - server: 198.51.100.11
+            - server: 198.18.128.1
+              vrf: management

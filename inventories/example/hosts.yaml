@@ -1,9 +1,8 @@
 ---
 all:
   children:
-    provider_mtc:
-      children:
-        region_mtc_canada:
-          hosts:
-            edge01:
-              ansible_host: 192.0.2.10
+    provider_ix_pop:
+      hosts:
+        ix-pop:
+          ansible_host: 198.18.191.1
+          ansible_user: cisco
