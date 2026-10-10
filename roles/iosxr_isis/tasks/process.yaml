@@ -1,0 +1,27 @@
+---
+- name: Configure IOS-XR IS-IS process identity
+  cisco.iosxr.iosxr_config:
+    parents: "router isis {{ iosxr_isis_process.name }}"
+    lines:
+      - "net {{ iosxr_isis_process.net }}"
+      - "is-type {{ iosxr_isis_process.is_type }}"
+
+- name: Configure IOS-XR IS-IS process address families
+  cisco.iosxr.iosxr_config:
+    parents:
+      - "router isis {{ iosxr_isis_process.name }}"
+      - "address-family {{ iosxr_isis_address_family.name }} unicast"
+    lines:
+      - "metric-style {{ iosxr_isis_address_family.metric_style | default('wide') }}"
+  loop: "{{ iosxr_isis_process.address_families | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_address_family
+    label: "{{ iosxr_isis_address_family.name }}"
+
+
+- name: Configure IOS-XR IS-IS interfaces
+  ansible.builtin.include_tasks: interface.yaml
+  loop: "{{ iosxr_isis_process.interfaces | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_interface
+    label: "{{ iosxr_isis_interface.name }}"

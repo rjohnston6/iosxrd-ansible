@@ -51,9 +51,10 @@ For example, banners declared in `group_vars/all.yaml` apply by default to all
 devices. If a provider, region, or device defines its own `banners` list, that
 list replaces the inherited list rather than appending to it.
 
-The example includes `iosxr_system`, `iosxr_l3_interfaces`, and `iosxr_ntp`
-roles. The system role applies the modeled hostname and banners; the device
-example includes login and MOTD banners.
+The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`, and
+`iosxr_isis` roles. The system role applies the modeled hostname and banners;
+the device example includes login and MOTD banners. IS-IS remains a no-op unless
+`isis.processes` is supplied in the effective model.
 The `iosxr_l3_interfaces` role consumes a list of named interfaces. Each entry
 can define IPv4 addresses, IPv6 addresses, or both; the same structure applies
 to physical interfaces and loopbacks. Interface descriptions and Ethernet MTU
@@ -111,6 +112,19 @@ ntp:
 
 This state adds or updates modeled servers but does not remove previously
 configured servers that are absent from the model.
+
+### IS-IS modeling
+
+The installed `cisco.iosxr` collection does not provide an IS-IS resource
+module, so `iosxr_isis` uses `cisco.iosxr.iosxr_config` with structured process
+and interface data. The separate [`examples/isis-model.yaml`](examples/isis-model.yaml)
+shows an L2-only provider process with a NET, IPv4/IPv6 unicast address
+families, wide metrics, a passive loopback, and a point-to-point physical
+interface. It is deliberately not loaded by the `ix-pop` example inventory or
+the `ix-pop` model; use it only with an IOS-XR device intended for IS-IS. The
+default playbook includes the role, but it does nothing without an IS-IS process
+in the effective model. No IS-IS configuration or adjacency was tested on the
+CML XRd device.
 
 Reference: [NetAsCode IOS-XR data models](https://netascode.cisco.com/docs/data_models/iosxr/).
 

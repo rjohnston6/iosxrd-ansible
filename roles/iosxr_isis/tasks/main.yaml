@@ -1,0 +1,7 @@
+---
+- name: Configure modeled IOS-XR IS-IS processes
+  ansible.builtin.include_tasks: process.yaml
+  loop: "{{ iosxr_effective_model.iosxr.devices.configuration.isis.processes | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_process
+    label: "{{ iosxr_isis_process.name }}"
