@@ -2,5 +2,14 @@
 - name: Configure IOS-XR hostname
   cisco.iosxr.iosxr_config:
     lines:
-      - "hostname {{ iosxr_system_config.hostname }}"
-  when: iosxr_system_config.hostname | length > 0
+      - "hostname {{ iosxr_effective_model.iosxr.devices.configuration.hostname }}"
+  when: iosxr_effective_model.iosxr.devices.configuration.hostname | default('') | length > 0
+
+- name: Configure IOS-XR banners
+  cisco.iosxr.iosxr_banner:
+    banner: "{{ item.banner }}"
+    text: "{{ item.text }}"
+    state: present
+  loop: "{{ iosxr_effective_model.iosxr.devices.configuration.banners | default([]) }}"
+  loop_control:
+    label: "{{ item.banner }}"

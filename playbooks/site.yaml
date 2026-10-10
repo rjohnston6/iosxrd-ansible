@@ -1,6 +1,15 @@
 ---
 - name: Configure IOS-XR devices
-  hosts: iosxr_devices
+  hosts: provider_mtc
   gather_facts: false
+  vars:
+    iosxr_effective_model: >-
+      {{
+        (iosxr_model_defaults | default({}))
+        | combine(iosxr_model_provider | default({}), recursive=True)
+        | combine(iosxr_model_region | default({}), recursive=True)
+        | combine(iosxr_model_device | default({}), recursive=True)
+      }}
   roles:
     - iosxr_system
+    - iosxr_ntp

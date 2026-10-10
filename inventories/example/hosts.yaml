@@ -1,7 +1,9 @@
 ---
 all:
   children:
-    iosxr_devices:
-      hosts:
-        edge01:
-          ansible_host: 192.0.2.10
+    provider_mtc:
+      children:
+        region_mtc_canada:
+          hosts:
+            edge01:
+              ansible_host: 192.0.2.10

@@ -15,8 +15,8 @@ structured host and group variables.
 2. Install the required Ansible collections into the ignored local collection
   directory with `make collections`.
 3. Enable the Git commit hooks with `make pre-commit-install`.
-4. Update `inventories/example/hosts.yaml` with your device addresses and
-   `inventories/example/group_vars/iosxr_devices.yaml` with the desired model.
+4. Update `inventories/example/hosts.yaml` with your device addresses and the
+  model variables under `inventories/example/group_vars/` and `host_vars/`.
 5. Run `make syntax-check` to validate the playbook, then run it against
    reachable devices with `ansible-playbook playbooks/site.yaml`.
 
@@ -26,25 +26,55 @@ Vault or an external secrets provider, not committed to inventory files.
 
 ## Data model and roles
 
-The example data model lives in inventory group variables. The `iosxr_system`
-role reads `iosxr_system_config.hostname` and applies it with the IOS-XR
-configuration module. Add feature data to the model and implement each feature
-in a focused role; keep site/device-specific values in inventory rather than
-embedding them in playbooks.
+The example follows the NetAsCode IOS-XR shape: configuration is rooted at
+`iosxr.devices.configuration`, with shared defaults and device-level data kept
+separate from the playbook. It extends that pattern with provider and region
+layers using Ansible inventory groups:
 
 ```text
-inventories/
-  example/
-    hosts.yaml
-    group_vars/
-      iosxr_devices.yaml
-playbooks/
-  site.yaml
-roles/
-  iosxr_system/
-    defaults/main.yaml
-    tasks/main.yaml
+inventories/example/
+  hosts.yaml
+  group_vars/
+    all.yaml
+    provider_mtc.yaml
+    region_mtc_canada.yaml
+  host_vars/
+    edge01.yaml
 ```
+
+`playbooks/site.yaml` combines the model in this order: global defaults,
+provider, region, then device. Nested mappings merge recursively; lists replace
+the inherited list. In the example, Canada's NTP server list replaces MTC's
+list, which replaces the global default. A feature role consumes only the
+resulting `iosxr_effective_model`, not the hierarchy it came from.
+For example, banners declared in `group_vars/all.yaml` apply by default to all
+devices. If a provider, region, or device defines its own `banners` list, that
+list replaces the inherited list rather than appending to it.
+
+The example includes `iosxr_system` and `iosxr_ntp` roles. The system role
+applies modeled hostnames and banners; the device example includes login and
+MOTD banners.
+The NTP role applies the effective structured server list with
+`cisco.iosxr.iosxr_ntp_global` in `merged` state. It checks `show version` and
+skips NTP on IOS XRd, where the NTP CLI is not available on the test image. The
+Canada example configures `198.18.128.1` through VRF
+`management`. The `vrf` property is optional and belongs to each server entry:
+use the exact VRF name configured on the device (for example, `mgmt`), or omit
+`vrf` to configure the server in the global routing table. The role passes
+these entries directly to the collection module. For example:
+
+```yaml
+ntp:
+  servers:
+    - server: 198.18.128.1
+      vrf: mgmt
+    - server: 192.0.2.123
+```
+
+This state adds or updates modeled servers but does not remove previously
+configured servers that are absent from the model.
+
+Reference: [NetAsCode IOS-XR data models](https://netascode.cisco.com/docs/data_models/iosxr/).
 
 ## Checks
 

@@ -1,0 +1,9 @@
+---
+iosxr_model_region:
+  iosxr:
+    devices:
+      configuration:
+        ntp:
+          servers:
+            - server: 198.18.128.1
+              vrf: management

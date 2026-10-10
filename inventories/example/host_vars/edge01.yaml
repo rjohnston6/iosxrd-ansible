@@ -1,0 +1,13 @@
+---
+iosxr_model_device:
+  iosxr:
+    devices:
+      configuration:
+        hostname: edge01
+        banners:
+          - banner: login
+            text: |-
+              @Authorized users only. Unauthorized access is prohibited.@
+          - banner: motd
+            text: |-
+              @Authorized access only. Activity may be monitored.@

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Reusable Ansible automation for Cisco IOS-XR platforms"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["paramiko>=3.4.0"]
 
 [dependency-groups]
 lint = ["ansible-lint>=25.1.0", "pre-commit>=4.6.0"]

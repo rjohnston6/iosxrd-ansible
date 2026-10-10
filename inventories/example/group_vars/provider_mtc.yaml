@@ -1,0 +1,9 @@
+---
+iosxr_model_provider:
+  iosxr:
+    devices:
+      configuration:
+        ntp:
+          servers:
+            - server: 198.51.100.10
+            - server: 198.51.100.11

@@ -1,0 +1,11 @@
+---
+ansible_connection: ansible.netcommon.network_cli
+ansible_network_os: cisco.iosxr.iosxr
+
+iosxr_model_defaults:
+  iosxr:
+    devices:
+      configuration:
+        ntp:
+          servers:
+            - server: 192.0.2.123

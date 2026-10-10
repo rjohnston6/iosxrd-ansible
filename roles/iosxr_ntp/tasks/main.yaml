@@ -1,0 +1,17 @@
+---
+- name: Check IOS-XR platform for NTP support
+  cisco.iosxr.iosxr_command:
+    commands:
+      - show version
+  register: iosxr_ntp_platform
+  changed_when: false
+  when: iosxr_effective_model.iosxr.devices.configuration.ntp.servers | default([]) | length > 0
+
+- name: Configure IOS-XR NTP servers
+  cisco.iosxr.iosxr_ntp_global:
+    config:
+      servers: "{{ iosxr_effective_model.iosxr.devices.configuration.ntp.servers }}"
+    state: merged
+  when:
+    - iosxr_effective_model.iosxr.devices.configuration.ntp.servers | default([]) | length > 0
+    - "'XRd' not in iosxr_ntp_platform.stdout[0]"
