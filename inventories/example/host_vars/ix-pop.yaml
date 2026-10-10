@@ -30,3 +30,39 @@ iosxr_model_device:
           - banner: motd
             text: |-
               @Authorized access only. Activity may be monitored.@
+        bgp:
+          as_number: 64520
+          router_id_interface: Loopback0
+          route_policies:
+            - name: EBGP-ACCEPT-ALL
+              statements:
+                - pass
+          address_families:
+            - afi: ipv4
+              safi: unicast
+            - afi: ipv6
+              safi: unicast
+          peer_groups:
+            - name: EBGP-AS64521
+              remote_as: 64521
+              address_family:
+                - afi: ipv4
+                  safi: unicast
+                  route_policy:
+                    inbound: EBGP-ACCEPT-ALL
+                    outbound: EBGP-ACCEPT-ALL
+                - afi: ipv6
+                  safi: unicast
+                  route_policy:
+                    inbound: EBGP-ACCEPT-ALL
+                    outbound: EBGP-ACCEPT-ALL
+          global:
+            neighbors:
+              - neighbor_address: 198.19.1.1
+                description: eBGP peer via IPv4
+                use:
+                  neighbor_group: EBGP-AS64521
+              - neighbor_address: 2001:db8:5555:2000::2
+                description: eBGP peer via IPv6
+                use:
+                  neighbor_group: EBGP-AS64521

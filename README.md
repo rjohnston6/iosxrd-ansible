@@ -51,10 +51,12 @@ For example, banners declared in `group_vars/all.yaml` apply by default to all
 devices. If a provider, region, or device defines its own `banners` list, that
 list replaces the inherited list rather than appending to it.
 
-The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`, and
-`iosxr_isis` roles. The system role applies the modeled hostname and banners;
-the device example includes login and MOTD banners. IS-IS remains a no-op unless
-`isis.processes` is supplied in the effective model.
+The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`,
+`iosxr_isis`, and `iosxr_bgp` roles. The system role applies the modeled
+hostname and banners; the device example includes login and MOTD banners.
+IS-IS remains a no-op unless
+`isis.processes` is supplied in the effective model. BGP is a no-op unless
+`bgp` is supplied.
 The `iosxr_l3_interfaces` role consumes a list of named interfaces. Each entry
 can define IPv4 addresses, IPv6 addresses, or both; the same structure applies
 to physical interfaces and loopbacks. Interface descriptions and Ethernet MTU
@@ -125,6 +127,86 @@ the `ix-pop` model; use it only with an IOS-XR device intended for IS-IS. The
 default playbook includes the role, but it does nothing without an IS-IS process
 in the effective model. No IS-IS configuration or adjacency was tested on the
 CML XRd device.
+
+### BGP modeling
+
+`iosxr_bgp` composes the installed IOS-XR BGP global, address-family,
+neighbor-address-family, and templates modules. Its process-level
+`address_families` list explicitly activates AFs under `router bgp` before
+peer configuration; AFs under a peer group separately configure that group's
+per-neighbor policy. The `ix-pop` host model uses
+local AS 64520 and one eBGP peer in AS 64521 over IPv4 `198.19.1.1` and IPv6
+`2001:db8:5555:2000::2`, with IPv4/IPv6 unicast in the default VRF. It sets
+the explicit `EBGP-ACCEPT-ALL` route policy in both directions for each AF.
+That policy contains `pass`, so it permits every route; it is intentionally
+limited to this isolated CML test device and is not an appropriate production
+policy without deliberate route filtering. Both sessions inherit the remote AS
+and address-family policies from the `EBGP-AS64521` neighbor group. The role
+derives the BGP router ID from the configured IPv4 address on the modeled
+`router_id_interface` (default `Loopback0`); if that interface or its IPv4
+address is not modeled, it warns and omits the router ID.
+
+The BGP model was deployed to `ix-pop`; running configuration includes router
+ID `198.19.0.1`, global IPv4/IPv6 unicast, the neighbor group, both peers, and
+the explicit accept-all policies. A subsequent playbook run reported no
+changes. At validation time, the IPv4 peer was `Idle` and the IPv6 peer was
+`Active`, so session establishment and route exchange remain unverified.
+
+The same model supports iBGP by setting a peer's AS to the local AS and, for
+loopback-sourced sessions, setting `update_source` on its peer group. Global
+AF-level settings use `address_families` entries with an optional `vrf`; per-
+neighbor activation and policy use `neighbor_address_families`, with a `vrfs`
+list containing peers and their AFs. For example, an iBGP peer can carry both
+AFs in multiple VRFs:
+
+```yaml
+neighbor_address_families:
+  vrfs:
+    - vrf: CUSTOMER_A
+      neighbors:
+        - neighbor_address: "{{ bgp_route_reflector }}"
+          address_family:
+            - afi: ipv4
+              safi: unicast
+              route_policy:
+                inbound: CUSTOMER-A-V4-IN
+                outbound: CUSTOMER-A-V4-OUT
+              maximum_prefix:
+                max_limit: 1000
+                threshold_value: 80
+            - afi: ipv6
+              safi: unicast
+              route_policy:
+                inbound: CUSTOMER-A-V6-IN
+                outbound: CUSTOMER-A-V6-OUT
+              maximum_prefix:
+                max_limit: 1000
+                threshold_value: 80
+    - vrf: CUSTOMER_B
+      neighbors:
+        - neighbor_address: "{{ bgp_route_reflector }}"
+          address_family:
+            - afi: ipv4
+              safi: unicast
+            - afi: ipv6
+              safi: unicast
+```
+
+Peer-group address families can opt into SRv6 encapsulation:
+
+```yaml
+peer_groups:
+  - name: SRV6-CORE
+    address_family:
+      - afi: ipv4
+        safi: unicast
+        encapsulation_type_srv6: true
+```
+
+The installed templates module accepts but does not merge that SRv6 field, so
+the role applies it with a narrow `iosxr_config` fallback. SRv6 locator and
+service configuration is separate from BGP and needs its own platform
+configuration and device-specific validation.
 
 Reference: [NetAsCode IOS-XR data models](https://netascode.cisco.com/docs/data_models/iosxr/).
 

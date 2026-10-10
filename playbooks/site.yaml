@@ -10,8 +10,10 @@
         | combine(iosxr_model_region | default({}), recursive=True)
         | combine(iosxr_model_device | default({}), recursive=True)
       }}
+    iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp | default({}) }}"
   roles:
     - iosxr_system
     - iosxr_l3_interfaces
     - iosxr_ntp
     - iosxr_isis
+    - iosxr_bgp
