@@ -50,6 +50,8 @@ replaces the global default. A feature role consumes only the resulting
 For example, banners declared in `group_vars/all.yaml` apply by default to all
 devices. If a provider, region, or device defines its own `banners` list, that
 list replaces the inherited list rather than appending to it.
+For architecture decisions, current validation status, and planned topology
+work, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`,
 `iosxr_isis`, and `iosxr_bgp` roles. The system role applies the modeled
@@ -145,6 +147,34 @@ and address-family policies from the `EBGP-AS64521` neighbor group. The role
 derives the BGP router ID from the configured IPv4 address on the modeled
 `router_id_interface` (default `Loopback0`); if that interface or its IPv4
 address is not modeled, it warns and omits the router ID.
+
+Route policies are mappings keyed by policy name, so recursive scope merging
+preserves policies declared at broader scopes and lets a host add or override
+one by name. `EBGP-ACCEPT-ALL` is defined in `group_vars/all.yaml` and inherited
+by the CML device. Attach each policy under the relevant peer-group or neighbor
+address family; defining a policy alone does not apply it. For example, a host
+can add a route policy with multiple conditional branches:
+
+```yaml
+bgp:
+  route_policies:
+    SET-COMMUNITY-EXAMPLE:
+      statements: |-
+        if destination in (PFX-SET-A) then
+          set community (65000:111) additive
+          pass
+        elseif destination in (PFX-SET-B) then
+          set community (65000:222) additive
+          pass
+        else
+          pass
+        endif
+```
+
+Policy bodies are multiline IOS-XR RPL, preserving indentation and control-flow
+keywords such as `if`, `elseif`, `else`, and `endif`. This example references
+prefix sets that will be modeled separately; it is illustrative and is not
+loaded on `ix-pop`.
 
 The BGP model was deployed to `ix-pop`; running configuration includes router
 ID `198.19.0.1`, global IPv4/IPv6 unicast, the neighbor group, both peers, and

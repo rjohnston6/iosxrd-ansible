@@ -33,10 +33,6 @@ iosxr_model_device:
         bgp:
           as_number: 64520
           router_id_interface: Loopback0
-          route_policies:
-            - name: EBGP-ACCEPT-ALL
-              statements:
-                - pass
           address_families:
             - afi: ipv4
               safi: unicast

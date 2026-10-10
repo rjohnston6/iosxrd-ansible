@@ -61,7 +61,7 @@
 - name: Configure IOS-XR BGP route policies
   cisco.iosxr.iosxr_config:
     content: "{{ lookup('ansible.builtin.template', 'route_policies.j2') }}"
-  when: iosxr_bgp_model.route_policies | default([]) | length > 0
+  when: iosxr_bgp_model.route_policies | default({}) | length > 0
 
 - name: Enable IOS-XR global BGP address families
   cisco.iosxr.iosxr_config:

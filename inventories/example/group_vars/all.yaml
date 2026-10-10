@@ -9,3 +9,8 @@ iosxr_model_defaults:
         ntp:
           servers:
             - server: 192.0.2.123
+        bgp:
+          route_policies:
+            EBGP-ACCEPT-ALL:
+              statements: |-
+                pass
