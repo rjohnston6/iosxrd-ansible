@@ -12,4 +12,5 @@
       }}
   roles:
     - iosxr_system
+    - iosxr_l3_interfaces
     - iosxr_ntp

@@ -4,6 +4,25 @@ iosxr_model_device:
     devices:
       configuration:
         hostname: edge01
+        interfaces:
+          - name: GigabitEthernet0/0/0/1
+            description: Example dual-stack physical interface
+            enabled: true
+            mtu: 9000
+          - name: Loopback0
+            description: Example dual-stack loopback
+            enabled: true
+        l3_interfaces:
+          - name: GigabitEthernet0/0/0/1
+            ipv4:
+              - address: 192.0.2.2/24
+            ipv6:
+              - address: 2001:db8:100::2/64
+          - name: Loopback0
+            ipv4:
+              - address: 192.0.2.1/32
+            ipv6:
+              - address: 2001:db8:100::1/128
         banners:
           - banner: login
             text: |-

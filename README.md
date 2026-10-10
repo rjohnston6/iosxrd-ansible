@@ -54,6 +54,47 @@ list replaces the inherited list rather than appending to it.
 The example includes `iosxr_system` and `iosxr_ntp` roles. The system role
 applies modeled hostnames and banners; the device example includes login and
 MOTD banners.
+The `iosxr_l3_interfaces` role consumes a list of named interfaces. Each entry
+can define IPv4 addresses, IPv6 addresses, or both; the same structure applies
+to physical interfaces and loopbacks. Interface descriptions and Ethernet MTU
+are modeled separately under `interfaces`, using the same interface names;
+the collection supports MTU on Ethernet interfaces, not loopbacks. Set
+`enabled: true` to issue `no shutdown` or `enabled: false` to issue `shutdown`;
+omit it to leave the current administrative state unchanged. The device example
+models both address families and descriptions on a physical interface and
+`Loopback0`, enables both, and sets MTU on the physical interface:
+
+```yaml
+interfaces:
+  - name: GigabitEthernet0/0/0/1
+    description: Example dual-stack physical interface
+    enabled: true
+    mtu: 9000
+  - name: Loopback0
+    description: Example dual-stack loopback
+    enabled: true
+l3_interfaces:
+  - name: GigabitEthernet0/0/0/1
+    ipv4:
+      - address: 192.0.2.2/24
+    ipv6:
+      - address: 2001:db8:100::2/64
+  - name: Loopback0
+    ipv4:
+      - address: 192.0.2.1/32
+    ipv6:
+      - address: 2001:db8:100::1/128
+```
+
+### Stage 1 validation
+
+The interface roles were applied to the IOS XRd 26.1.1 test device `ix-pop`.
+`GigabitEthernet0/0/0/1` was enabled with MTU 1500, IPv4 `198.19.1.0/31`, and
+IPv6 `2001:db8:5555:2000::1/64`. `Loopback0` was configured with IPv4
+`198.19.0.1/31` and IPv6 `2001:db8:5555::1/128`. Both interfaces reported
+`up/up`, the running configuration matched the requested descriptions and
+addresses, and a subsequent L3 merge reported no changes.
+
 The NTP role applies the effective structured server list with
 `cisco.iosxr.iosxr_ntp_global` in `merged` state. It checks `show version` and
 skips NTP on IOS XRd, where the NTP CLI is not available on the test image. The

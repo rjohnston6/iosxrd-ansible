@@ -1,0 +1,12 @@
+---
+- name: Configure IOS-XR interface attributes
+  cisco.iosxr.iosxr_interfaces:
+    config: "{{ iosxr_effective_model.iosxr.devices.configuration.interfaces }}"
+    state: merged
+  when: iosxr_effective_model.iosxr.devices.configuration.interfaces | default([]) | length > 0
+
+- name: Configure IOS-XR Layer 3 interfaces
+  cisco.iosxr.iosxr_l3_interfaces:
+    config: "{{ iosxr_effective_model.iosxr.devices.configuration.l3_interfaces }}"
+    state: merged
+  when: iosxr_effective_model.iosxr.devices.configuration.l3_interfaces | default([]) | length > 0
