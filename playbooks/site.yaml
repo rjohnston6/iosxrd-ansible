@@ -1,0 +1,6 @@
+---
+- name: Configure IOS-XR devices
+  hosts: iosxr_devices
+  gather_facts: false
+  roles:
+    - iosxr_system

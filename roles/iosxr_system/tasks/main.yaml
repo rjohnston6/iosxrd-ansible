@@ -1,0 +1,6 @@
+---
+- name: Configure IOS-XR hostname
+  cisco.iosxr.iosxr_config:
+    lines:
+      - "hostname {{ iosxr_system_config.hostname }}"
+  when: iosxr_system_config.hostname | length > 0

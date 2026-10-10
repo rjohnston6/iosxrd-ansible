@@ -1,0 +1,16 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: ansible-lint
+        name: ansible lint
+        entry: make ansible-lint
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: markdown-lint
+        name: markdown lint
+        entry: make markdown-lint
+        language: system
+        pass_filenames: false
+        always_run: true
