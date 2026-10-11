@@ -1,0 +1,11 @@
+---
+- name: Validate modeled SRv6 locators
+  ansible.builtin.include_tasks: validate.yaml
+  when: iosxr_effective_model.iosxr.devices.configuration.srv6.enabled | default(false) | bool
+
+- name: Configure IOS-XR SRv6 locators
+  cisco.iosxr.iosxr_config:
+    content: "{{ lookup('ansible.builtin.template', 'locators.j2') }}"
+  when:
+    - iosxr_effective_model.iosxr.devices.configuration.srv6.enabled | default(false) | bool
+    - iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({}) | length > 0
