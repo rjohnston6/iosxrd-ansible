@@ -1,0 +1,29 @@
+---
+- name: Validate interface group references
+  ansible.builtin.assert:
+    that:
+      - model_interface.interface_groups | default([]) is sequence
+      - model_interface.interface_groups | default([]) is not string
+      - model_interface.interface_groups | default([]) | difference((iosxr_model_assembled.interface_groups | default({})).keys() | list) | length == 0
+    fail_msg: "Interface {{ model_interface.name }} references an undefined interface group."
+
+- name: Initialize interface configuration
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_interface: {}
+
+- name: Merge interface groups in order
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_interface: >-
+      {{ iosxr_model_resolved_interface | combine(
+           iosxr_model_assembled.interface_groups[interface_group].configuration | default({}),
+           recursive=True, list_merge='replace') }}
+  loop: "{{ model_interface.interface_groups | default([]) }}"
+  loop_control:
+    loop_var: interface_group
+
+- name: Apply explicit interface settings
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_interfaces: >-
+      {{ iosxr_model_resolved_interfaces + [iosxr_model_resolved_interface | combine(
+           model_interface | dict2items | rejectattr('key', 'equalto', 'interface_groups') | items2dict,
+           recursive=True, list_merge='replace')] }}

@@ -1,7 +1,7 @@
 ---
-iosxr_model_provider:
-  iosxr:
-    devices:
+iosxr:
+  device_groups:
+    provider_ix_pop:
       configuration:
         ntp:
           servers:

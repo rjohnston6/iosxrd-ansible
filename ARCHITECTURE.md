@@ -7,40 +7,105 @@ strategy changes.
 ## Goals
 
 - Model IOS-XR configuration as structured data under
-  `iosxr.devices.configuration`.
-- Reuse model layers across devices while allowing provider, region, and device
-  overrides.
+  one `iosxr` root with defaults, global, named device groups, named devices,
+  and named interface groups.
+- Reuse model layers across devices while allowing device-group and device
+  overrides; provider and region are group names rather than hard-coded scopes.
 - Keep feature implementations in focused Ansible roles and use the installed
   `cisco.iosxr` resource modules where they cover the required configuration.
 - Validate rendered configuration before applying it, then verify running and
   operational state on an appropriate CML topology.
 
-The example inventory currently targets one CML device. It is a working
-integration target for system, interface, banner, and BGP configuration, but it
-is not a multi-router routing-protocol lab yet.
+The reusable example targets `ix-pop`; a temporary seven-router MTC topology
+has also been used to validate basic configuration and enabled IS-IS setup.
+The site play defaults to `provider_ix_pop`, with an `iosxr_target_hosts`
+inventory-pattern override for other providers. Field-level model documentation
+lives in [DATA_MODEL.md](DATA_MODEL.md).
 
 ## Model Layers and Merge Rules
 
-The playbook combines these variables in precedence order:
+The `iosxr_model` role collects independent `iosxr` fragments, then resolves
+configuration in ascending precedence order:
 
-1. `iosxr_model_defaults` from `group_vars/all.yaml`
-2. `iosxr_model_provider` from the matching provider group
-3. `iosxr_model_region` from an optional region group
-4. `iosxr_model_device` from the host variables
+1. `iosxr.defaults.configuration`
+2. `iosxr.global.configuration`
+3. `iosxr.device_groups.<name>.configuration` for each selected group
+4. `iosxr.devices.<inventory_hostname>.configuration`
+
+Devices and groups are mappings keyed by name. Separate files can contribute
+different features to the same entry. This is an Ansible-oriented adaptation
+of NetAsCode; exact schema compatibility is not currently guaranteed.
+
+Inventory variables use directories, for example `group_vars/all/`,
+`group_vars/provider_ix_pop/`, and `host_vars/ix-pop/`. Membership and feature
+configuration live in separate files, so adding a device does not require
+editing global configuration.
+
+Ansible normally replaces repeated `iosxr` variables. The resolver bypasses
+that loss by loading direct `.yaml`/`.yml` files individually under an isolated
+namespace and combining their registered contributions. It does not rely on
+`hash_behaviour=merge`. Connection variables remain ordinary inventory
+variables; files without `iosxr` are ignored by assembly.
+
+Default collection order is all-group directory, matching inventory-group
+directories alphabetically, then the host directory; filenames are sorted
+within each directory. Later fragments win within the same scope. Legacy
+single-file model variables are not consumed. `iosxr_model_directories` can
+replace discovery with an ordered list of absolute directories.
+
+By default, modeled groups matching the host's inventory groups are selected
+alphabetically. `devices.<name>.device_groups` explicitly replaces that
+selection with an ordered list; later groups win, and `[]` disables group
+inheritance. Unknown references fail. References do not load another group's
+files: use inventory membership or explicit model directories to make those
+definitions available. Ansible group priority does not change resolver order.
 
 The merge is recursive for mappings. Lists replace inherited lists; they do not
 append or merge by item. Use maps keyed by stable names for data that should
 inherit additively across scopes. BGP route policies use this pattern: a policy
 with the same name at a narrower scope overrides the inherited definition, and
-new names add policies without removing shared ones.
+new names add policies without removing shared ones. List replacement also
+applies within a scope; split features, not entries of interface/server lists.
+
+`interface_groups.<name>.configuration` provides interface metadata defaults.
+Resolved `interfaces` entries can reference ordered `interface_groups` lists.
+Group settings merge first; explicit interface settings win last. Unknown
+references fail and membership is stripped from module input. This does not
+yet extend to L3 addressing or protocol interface settings.
 
 Feature roles consume `iosxr_effective_model`; they should not need to know
-whether a value came from global, provider, region, or host scope. Model all
-configuration under `iosxr.devices.configuration` and keep secrets outside
+whether a value came from defaults, global, group, or device scope. The role
+publishes `iosxr_model_effective`; a playbook alias preserves the existing
+contract rooted at `iosxr.devices.configuration`. Keep secrets outside
 inventory files.
+
+## Protocol Participation
+
+BGP and IS-IS require explicit effective `configuration.bgp.enabled: true` or
+`configuration.isis.enabled: true`. Missing flags default to false. Inherited
+AS numbers, peers, policies, and IS-IS processes alone do not activate a role.
+The BGP gate covers all tasks, including shared route-policy configuration.
+
+Activation merges with the same scope precedence as other configuration.
+Put shared settings in defaults/global without activation; opt participating
+devices in through a PE/core group or device flag. P routers require no BGP
+stanza if no selected scope activates it. Do not activate BGP on a common
+provider group containing both P and PE routers. Device-level false can override
+a group opt-in. Protocols are independently controlled.
+
+Existing models must add true flags to continue applying protocols; the example
+BGP device and standalone IS-IS model have been migrated. Skipping management
+does not remove existing router configuration. Other feature roles are unchanged.
+`make model-test` checks activation inheritance and device overrides, and runs
+protocol roles locally with populated data and absent/false flags to verify
+they perform no device configuration. Enabled BGP initialization is also tested;
+live protocol application and operational state still require topology testing.
 
 ## Role Boundaries
 
+- `iosxr_model` collects model files and resolves device/group/interface
+  inheritance. It performs no device access and is tagged `model` in the site
+  playbook. `make model-check` resolves the example without configuring it.
 - `iosxr_system` applies hostname and login/MOTD banners.
 - `iosxr_l3_interfaces` configures interface metadata and L3 addresses. It uses
   `cisco.iosxr.iosxr_interfaces` for descriptions, enabled state, and Ethernet
@@ -48,21 +113,58 @@ inventory files.
 - `iosxr_ntp` uses `cisco.iosxr.iosxr_ntp_global`. It skips NTP on XRd because
   the CML XRd image rejects the NTP CLI used by the resource module.
 - `iosxr_isis` uses `cisco.iosxr.iosxr_config` because the installed collection
-  has no IS-IS resource module. It is a no-op unless `isis.processes` is
-  modeled. `examples/isis-model.yaml` is a standalone design example, not part
-  of the active CML host model.
+  has no IS-IS resource module. It is a no-op unless `isis.enabled` is true
+  and `isis.processes` is modeled. `examples/isis-model.yaml` is a standalone
+  design example, not part of the active CML host model. Processes are rendered
+  through one hierarchical template, including interface AF subcommands.
 - `iosxr_bgp` combines the collection's BGP global, address-family,
   neighbor-address-family, and templates modules with `iosxr_config` where
-  required by the installed collection's behavior.
+  required by the installed collection's behavior. All tasks require
+  `bgp.enabled: true`.
 
 Prefer a collection resource module for a feature when it accurately handles
 that feature. Use generic CLI configuration narrowly when no resource module
 exists or when a verified collection limitation prevents the needed config.
 Keep platform-specific fallbacks isolated and idempotent.
 
+## IS-IS Model
+
+IS-IS process AFs support metric style and `microloop_avoidance`.
+No `multi-topology` command is emitted for IOS-XR. Interface AFs accept legacy
+family strings or mappings with
+`name` and ordered `fast-reroute` command suffixes, including `per-prefix` and
+`per-prefix ti-lfa`. AF names can include `unicast` without duplicating it.
+Existing passive, circuit-type, and point-to-point attributes are preserved.
+
+Interface `hello-padding: disable` renders explicitly at IS-IS interface scope.
+Enabled IS-IS with modeled processes triggers `show version`; XRd active non-loopback
+interfaces missing the field warn but do not fail or receive an implicit setting.
+Passive interfaces and loopbacks are excluded. Explicit values remain user-owned.
+Offline tests cover XRd versus non-XRd warnings, omission, and device fixtures
+independent of the temporary MTC models.
+Operational adjacency and virtual-link MTU checks remain necessary.
+
+`microloop_avoidance` is a command suffix such as `segment-routing`, rendered
+as `microloop avoidance <value>`. Omitted or empty values emit nothing; supported
+options depend on the target platform. The old `microloop_avoidance_sr` boolean
+is no longer consumed.
+
+`process.j2` generates the process, interface, and AF hierarchy for a single
+`iosxr_config` merge per process. False/omitted optional flags emit nothing;
+this is not deletion semantics. Processes, interfaces, and AFs remain lists
+with replacement inheritance. Explicit `isis.enabled` gating is unchanged.
+
+Offline tests compare the exact requested configuration and cover the revised
+device fixtures, legacy family strings, empty microloop values, and absence of
+the unsupported `multi-topology` command. New commands still
+require platform acceptance and operational verification, including adjacency,
+IPv4/IPv6 routes, and TI-LFA repair paths. FRR/microloop options alone are not
+complete SRv6 support; locators and IS-IS SRv6 advertisement remain separate.
+
 ## BGP Model
 
-BGP lives at `iosxr.devices.configuration.bgp` and currently supports:
+BGP lives under each scope's `configuration.bgp`, resolved to
+`iosxr.devices.configuration.bgp` for roles, and currently supports:
 
 - Local AS, a router-ID source interface, and process-level global AF
   activation.
@@ -122,11 +224,44 @@ NTP is intentionally skipped on this XRd image. IS-IS has not been applied to
 this device. Do not infer protocol adjacency or route exchange from successful
 configuration alone.
 
+The split-file refactor is validated offline by `make model-test`,
+`make model-check`, syntax checks, and lint. Tests cover precedence, named
+fragment preservation, list replacement, interface inheritance, undefined
+device-group rejection, and the migrated example's configuration. The original
+`ix-pop` validation above describes pre-refactor configuration. Subsequent MTC
+validation on 2026-10-11 confirmed hostnames, inherited login banners, interface
+attributes/addressing, and IS-IS setup when enabled. The displayed P-102 running
+configuration includes the unique NET, both AFs, microloop avoidance, passive
+loopback, point-to-point interfaces, and IPv6 FRR/TI-LFA commands.
+
+The displayed neighbor table was empty; protocol adjacency and route exchange
+are not established by that evidence. An interface showed 8983-byte padded
+hellos and no received hellos. `hello-padding disable` was manually committed on
+one interface and subsequently added to the model/renderer; no post-change
+adjacency or recovery result is recorded here. NTP remains unvalidated on XRd,
+and end-to-end SRv6/TI-LFA repair remains unverified.
+
+## Review And Merge Readiness
+
+The refactor review covered fragment loading, scope precedence, device selection,
+interface groups, protocol opt-in, route-policy merging/rendering, hierarchical
+IS-IS rendering, and XRd warning behavior. Tests now use stable example data or
+self-contained fixtures rather than MTC files. The temporary MTC inventory has
+been removed, and the site play no longer hard-codes that provider.
+
+After inventory cleanup, `make model-test`, `make model-check`, `make lint`, and
+`make syntax-check` passed. Keep local `.vscode`
+settings and secrets out of the PR unless deliberately reviewed for inclusion.
+The breaking migrations are per-directory `iosxr` fragments and explicit protocol
+activation; see [DATA_MODEL.md](DATA_MODEL.md). Collection-version pinning,
+complete model schema validation, and topology validation are not part of this
+refactor. Configuration merges remain additive, not deletion/reconciliation.
+
 ## Next Topology Work
 
-When the additional CML routers are ready:
+On the multi-router topology:
 
-1. Define router inventory and provider/device model layers without putting
+1. Define router inventory and device-group/device model layers without putting
    credentials in YAML.
 2. Configure the remote AS 64521 router with the reciprocal IPv4/IPv6 interface
    addresses and matching eBGP neighbor settings.
@@ -139,8 +274,8 @@ When the additional CML routers are ready:
 6. Add VRF AF scenarios and verify neighbor AFs and route isolation per VRF.
 7. Plan SRv6 locator, service, and BGP signaling together; the current SRv6
    peer-group option alone is not a complete SRv6 deployment.
-8. Test IS-IS on a suitable image/topology rather than the current XRd device,
-   which is intentionally running without IS-IS.
+8. Verify IS-IS neighbors and IPv4/IPv6 routes after hello-padding changes;
+  then test failure/recovery and TI-LFA repair paths on a suitable topology.
 
 ## Working Practices for Future Changes
 

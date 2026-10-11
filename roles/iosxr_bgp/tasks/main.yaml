@@ -11,7 +11,9 @@
           )
         | list
       }}
-  when: iosxr_bgp_model.as_number is defined
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
 
 - name: Warn when the BGP router ID interface has no modeled IPv4 address
   ansible.builtin.debug:
@@ -20,6 +22,7 @@
       {{ iosxr_bgp_model.router_id_interface | default('Loopback0') }} has no
       IPv4 address.
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - >-
       (iosxr_bgp_router_id_interfaces | length == 0)
@@ -34,6 +37,7 @@
         | regex_replace('/[0-9]+$', '')
       }}
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_router_id_interfaces | length > 0
     - iosxr_bgp_router_id_interfaces[0].ipv4 | default([]) | length > 0
@@ -41,7 +45,9 @@
 - name: Initialize IOS-XR BGP global configuration
   ansible.builtin.set_fact:
     iosxr_bgp_global_config: "{{ iosxr_bgp_model.global | default({}) }}"
-  when: iosxr_bgp_model.as_number is defined
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
 
 - name: Add the derived router ID to IOS-XR BGP global configuration
   ansible.builtin.set_fact:
@@ -56,12 +62,17 @@
             recursive=True,
           )
       }}
-  when: iosxr_bgp_router_id is defined
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_router_id is defined
 
 - name: Configure IOS-XR BGP route policies
   cisco.iosxr.iosxr_config:
     content: "{{ lookup('ansible.builtin.template', 'route_policies.j2') }}"
-  when: iosxr_bgp_model.route_policies | default({}) | length > 0
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.route_policies | default({}) | length > 0
 
 - name: Enable IOS-XR global BGP address families
   cisco.iosxr.iosxr_config:
@@ -73,6 +84,7 @@
   loop_control:
     label: "{{ item.afi }} {{ item.safi | default('unicast') }}"
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.address_families | default([]) | length > 0
 
@@ -83,6 +95,7 @@
       neighbor: "{{ iosxr_bgp_model.peer_groups }}"
     state: merged
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.peer_groups | default([]) | length > 0
 
@@ -101,6 +114,7 @@
       {{ iosxr_bgp_peer_family.0.name }} {{ iosxr_bgp_peer_family.1.afi }}
       {{ iosxr_bgp_peer_family.1.safi }}
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_peer_family.1.encapsulation_type_srv6 | default(false)
 
@@ -109,6 +123,7 @@
     config: "{{ {'as_number': iosxr_bgp_model.as_number} | combine(iosxr_bgp_global_config | default({}), recursive=True) }}"
     state: merged
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.global | default({}) | length > 0
 
@@ -119,6 +134,7 @@
       address_family: "{{ iosxr_bgp_model.address_families }}"
     state: merged
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.address_families | default([]) | length > 0
 
@@ -127,5 +143,6 @@
     config: "{{ {'as_number': iosxr_bgp_model.as_number} | combine(iosxr_bgp_model.neighbor_address_families | default({}), recursive=True) }}"
     state: merged
   when:
+    - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.neighbor_address_families | default({}) | length > 0

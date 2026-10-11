@@ -1,0 +1,18 @@
+---
+- name: Warn about unspecified IS-IS hello padding on IOS-XRd
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: IOS-XRd IS-IS process {{ iosxr_isis_process.name }} interface
+      {{ iosxr_isis_padding_interface.name }} has no hello-padding setting.
+      Consider hello-padding: disable to avoid oversized hellos in virtual labs.
+      Continuing without changing the modeled interface settings.
+  loop: "{{ iosxr_isis_process.interfaces | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_padding_interface
+    label: "{{ iosxr_isis_padding_interface.name }}"
+  when:
+    - iosxr_isis_platform.stdout | default([]) | join(' ') is search('(?i)xrd')
+    - not iosxr_isis_padding_interface.passive | default(false) | bool
+    - not iosxr_isis_padding_interface.name.startswith('Loopback')
+    - iosxr_isis_padding_interface['hello-padding'] is not defined
+  register: iosxr_isis_padding_warnings
