@@ -22,6 +22,18 @@ The site play defaults to `provider_ix_pop`, with an `iosxr_target_hosts`
 inventory-pattern override for other providers. Field-level model documentation
 lives in [DATA_MODEL.md](DATA_MODEL.md).
 
+## SSH Transport
+
+Device access uses `ansible.netcommon.network_cli` with the libssh backend,
+selected explicitly by `[persistent_connection] ssh_type = libssh` in
+`ansible.cfg`. `ansible-pylibssh` replaces Paramiko as the project's runtime
+dependency and must be installed in the Python environment running Ansible.
+There is no automatic fallback to Paramiko. Inventory variables or environment
+settings can override this project default and should be reviewed when migrating.
+Password prompts and enabled host-key checking remain unchanged. Offline model,
+rendering, lint, and syntax tests do not establish live SSH connectivity; validate
+the transport separately against a reachable IOS-XR device.
+
 ## Model Layers and Merge Rules
 
 The `iosxr_model` role collects independent `iosxr` fragments, then resolves

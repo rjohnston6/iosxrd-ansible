@@ -6,7 +6,7 @@ structured host and group variables.
 ## Prerequisites
 
 - Python and [UV](https://docs.astral.sh/uv/)
-- Ansible installed in the active environment
+- Ansible and `ansible-pylibssh` installed in the same active environment
 - `markdownlint-cli2` available on `PATH` for Markdown checks
 
 ## Getting started
@@ -19,6 +19,29 @@ structured host and group variables.
   model variables under `inventories/example/group_vars/` and `host_vars/`.
 5. Run `make syntax-check` to validate the playbook, then run it against the
   reachable device with `ansible-playbook playbooks/site.yaml --ask-pass`.
+
+### SSH backend
+
+`network_cli` uses libssh via `ansible-pylibssh`. The project dependency and
+lockfile install the binding with `uv sync --group lint`; `ansible.cfg` explicitly
+sets `[persistent_connection] ssh_type = libssh`, without automatic Paramiko
+fallback. Password prompting with `--ask-pass` remains unchanged, and host-key
+checking remains enabled.
+
+If Ansible is installed separately as a UV tool, install the binding into that
+tool environment too:
+
+```bash
+uv tool install --with ansible-pylibssh ansible --force
+```
+
+Alternatively, use `uv run --group lint ansible-playbook` to run Ansible from
+the project's lint environment, which also includes Ansible Core. Installing
+the binding only in the project environment does not make it available to a
+separately installed `ansible-playbook` executable. Existing inventory or
+environment overrides selecting Paramiko must be removed or changed to libssh.
+
+### Inventory and targeting
 
 The example targets the CML test device `ix-pop` at `198.18.191.1`. Change the
 address when using a different device. The inventory includes the non-secret
