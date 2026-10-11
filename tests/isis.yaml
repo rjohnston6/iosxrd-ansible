@@ -1,0 +1,190 @@
+---
+- name: Verify IS-IS CLI rendering without device access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    isis_test_template: "{{ playbook_dir }}/../roles/iosxr_isis/templates/process.j2"
+    iosxr_isis_process:
+      name: CORE
+      is_type: level-2-only
+      net: 49.0001.0000.0000.0011.00
+      address_families:
+        - name: ipv4
+          metric_style: wide
+          microloop_avoidance: segment-routing
+        - name: ipv6
+          metric_style: wide
+          microloop_avoidance: segment-routing
+      interfaces:
+        - name: Loopback0
+          address_families:
+            - name: ipv4 unicast
+            - name: ipv6 unicast
+        - name: GigabitEthernet0/0/0/0
+          hello-padding: disable
+          address_families:
+            - name: ipv6 unicast
+              fast-reroute:
+                - per-prefix
+                - per-prefix ti-lfa
+    isis_test_expected: |-
+      router isis CORE
+       is-type level-2-only
+       net 49.0001.0000.0000.0011.00
+       address-family ipv4 unicast
+        metric-style wide
+        microloop avoidance segment-routing
+       address-family ipv6 unicast
+        metric-style wide
+        microloop avoidance segment-routing
+       interface Loopback0
+        address-family ipv4 unicast
+        address-family ipv6 unicast
+       interface GigabitEthernet0/0/0/0
+        hello-padding disable
+        address-family ipv6 unicast
+         fast-reroute per-prefix
+         fast-reroute per-prefix ti-lfa
+  tasks:
+    - name: Verify requested configuration and hierarchy exactly
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.template', isis_test_template) | trim == isis_test_expected
+          - "'multi-topology' not in lookup('ansible.builtin.template', isis_test_template)"
+
+    - name: Load the existing standalone model
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../examples/isis-model.yaml"
+        name: isis_test_example
+
+    - name: Verify legacy string address families and interface attributes
+      ansible.builtin.assert:
+        that:
+          - "'  address-family ipv4 unicast' in isis_test_rendered"
+          - "'  address-family ipv6 unicast' in isis_test_rendered"
+          - "'  passive' in isis_test_rendered"
+          - "'  point-to-point' in isis_test_rendered"
+          - "'  circuit-type level-2-only' in isis_test_rendered"
+          - "'fast-reroute' not in isis_test_rendered"
+          - "'microloop avoidance' not in isis_test_rendered"
+          - "'multi-topology' not in isis_test_rendered"
+          - "'unicast unicast' not in isis_test_rendered"
+          - "'hello-padding' not in isis_test_rendered"
+      vars:
+        iosxr_isis_process: "{{ isis_test_example.iosxr.device_groups.provider_ix_pop.configuration.isis.processes[0] }}"
+        isis_test_rendered: "{{ lookup('ansible.builtin.template', isis_test_template) }}"
+
+    - name: Verify empty microloop option omits the command
+      ansible.builtin.assert:
+        that:
+          - "'microloop avoidance' not in isis_test_rendered"
+          - "'multi-topology' not in isis_test_rendered"
+          - "'address-family ipv6 unicast' in isis_test_rendered"
+          - "'unicast unicast' not in isis_test_rendered"
+      vars:
+        iosxr_isis_process:
+          name: CORE
+          net: 49.0001.0000.0000.0011.00
+          is_type: level-2-only
+          address_families:
+            - name: ipv6 unicast
+              microloop_avoidance: ''
+        isis_test_rendered: "{{ lookup('ansible.builtin.template', isis_test_template) }}"
+
+    - name: Define a detailed device process fixture
+      ansible.builtin.set_fact:
+        isis_test_device_process:
+          name: CORE
+          net: 49.0001.0000.0000.0011.00
+          is_type: level-2-only
+          address_families:
+            - name: ipv4
+              metric_style: wide
+              microloop_avoidance: segment-routing
+            - name: ipv6
+              metric_style: wide
+              microloop_avoidance: segment-routing
+          interfaces:
+            - name: Loopback0
+              passive: true
+              address_families: [ipv4, ipv6]
+            - name: GigabitEthernet0/0/0/0
+              point_to_point: true
+              hello-padding: disable
+              address_families:
+                - name: ipv4 unicast
+                - name: ipv6 unicast
+                  fast-reroute: [per-prefix, per-prefix ti-lfa]
+            - name: GigabitEthernet0/0/0/1
+              point_to_point: true
+              hello-padding: disable
+              address_families:
+                - name: ipv4 unicast
+                - name: ipv6 unicast
+                  fast-reroute: [per-prefix, per-prefix ti-lfa]
+
+    - name: Verify revised device model settings render at the correct levels
+      ansible.builtin.assert:
+        that:
+          - "' net 49.0001.0000.0000.0011.00' in isis_test_rendered"
+          - "' address-family ipv6 unicast\n  metric-style wide\n  microloop avoidance segment-routing' in isis_test_rendered"
+          - "'multi-topology' not in isis_test_rendered"
+          - "' interface Loopback0\n  passive\n  address-family ipv4 unicast\n  address-family ipv6 unicast' in isis_test_rendered"
+          - "(' interface GigabitEthernet0/0/0/0\n' ~ isis_test_interface_settings) in isis_test_rendered"
+          - "(' interface GigabitEthernet0/0/0/1\n' ~ isis_test_interface_settings) in isis_test_rendered"
+          - "'unicast unicast' not in isis_test_rendered"
+      vars:
+        iosxr_isis_process: "{{ isis_test_device_process }}"
+        isis_test_rendered: "{{ lookup('ansible.builtin.template', isis_test_template) }}"
+        isis_test_interface_settings: |2-
+            point-to-point
+            hello-padding disable
+            address-family ipv4 unicast
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+
+    - name: Check XRd warning behavior without a router
+      ansible.builtin.include_tasks: ../roles/iosxr_isis/tasks/hello_padding.yaml
+      vars:
+        iosxr_isis_platform:
+          stdout: ['Cisco IOS XR Software, IOS-XRd']
+        iosxr_isis_process:
+          name: CORE
+          interfaces:
+            - name: GigabitEthernet0/0/0/0
+            - name: GigabitEthernet0/0/0/1
+              hello-padding: disable
+            - name: GigabitEthernet0/0/0/2
+              passive: true
+            - name: Loopback0
+
+    - name: Verify only the active unspecified XRd interface warned
+      ansible.builtin.assert:
+        that:
+          - iosxr_isis_padding_warnings.results | rejectattr('skipped', 'defined') | list | length == 1
+          - "'GigabitEthernet0/0/0/0 has no hello-padding setting' in iosxr_isis_padding_warnings.results[0].msg"
+          - not iosxr_isis_padding_warnings.changed
+
+    - name: Check physical IOS-XR does not warn
+      ansible.builtin.include_tasks: ../roles/iosxr_isis/tasks/hello_padding.yaml
+      vars:
+        iosxr_isis_platform:
+          stdout: ['Cisco IOS XR Software, ASR9K']
+
+    - name: Verify non-XRd skips hello padding warning
+      ansible.builtin.assert:
+        that:
+          - iosxr_isis_padding_warnings.results | rejectattr('skipped', 'defined') | list | length == 0
+
+    - name: Verify fixture GigabitEthernet hello padding is explicit and rendered
+      ansible.builtin.assert:
+        that:
+          - isis_test_gigabit_interfaces | rejectattr('hello-padding', 'defined') | list | length == 0
+          - isis_test_gigabit_interfaces | rejectattr('hello-padding', 'equalto', 'disable') | list | length == 0
+          - isis_test_rendered | regex_findall('(?m)^  hello-padding disable$') | length == isis_test_gigabit_interfaces | length
+      vars:
+        iosxr_isis_process: "{{ isis_test_device_process }}"
+        isis_test_gigabit_interfaces: "{{ iosxr_isis_process.interfaces | selectattr('name', 'match', '^GigabitEthernet') | list }}"
+        isis_test_rendered: "{{ lookup('ansible.builtin.template', isis_test_template) }}"

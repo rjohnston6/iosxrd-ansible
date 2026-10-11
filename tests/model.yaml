@@ -1,0 +1,212 @@
+---
+- name: Test model resolution without a device connection
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    iosxr_effective_model: "{{ iosxr_model_effective }}"
+  tasks:
+    - name: Create temporary model directory
+      ansible.builtin.tempfile:
+        state: directory
+      register: model_test_directory
+
+    - name: Run isolated model tests
+      block:
+        - name: Write split model fragments
+          ansible.builtin.copy:
+            dest: "{{ model_test_directory.path }}/{{ item.name }}.yaml"
+            mode: "0600"
+            content: "{{ {'iosxr': item.model} | to_nice_yaml }}"
+          loop:
+            - name: 00-defaults
+              model:
+                defaults:
+                  configuration:
+                    banners:
+                      - banner: login
+                        text: Authorized users only.
+                    ntp:
+                      servers: [server: default]
+                    bgp:
+                      route_policies:
+                        SHARED: { statements: pass }
+            - name: 10-global
+              model:
+                global:
+                  configuration:
+                    ntp:
+                      servers: [server: global]
+                interface_groups:
+                  uplink:
+                    configuration: { mtu: 9000, enabled: true }
+                device_groups:
+                  first:
+                    configuration:
+                      ntp:
+                        servers: [server: first]
+                  second:
+                    configuration:
+                      bgp:
+                        enabled: true
+                        route_policies:
+                          GROUP: { statements: pass }
+                          SHARED: { statements: drop }
+                      isis:
+                        enabled: true
+                      ntp:
+                        servers: [server: second]
+            - name: 20-membership
+              model:
+                devices:
+                  localhost:
+                    device_groups: [first, second]
+            - name: 30-device
+              model:
+                devices:
+                  localhost:
+                    configuration:
+                      hostname: test-router
+                      ntp:
+                        servers: [server: device]
+                      bgp:
+                        enabled: false
+                        route_policies:
+                          LOCAL: { statements: drop }
+                      isis:
+                        enabled: false
+                      interfaces:
+                        - name: GigabitEthernet0/0/0/1
+                          interface_groups: [uplink]
+                          mtu: 1500
+
+        - name: Resolve split model
+          ansible.builtin.include_role:
+            name: iosxr_model
+          vars:
+            iosxr_model_directories: ["{{ model_test_directory.path }}"]
+
+        - name: Verify precedence and named fragment merging
+          ansible.builtin.assert:
+            that:
+              - iosxr_model_selected_device_groups == ['first', 'second']
+              - iosxr_effective_model.iosxr.devices.configuration.hostname == 'test-router'
+              - iosxr_effective_model.iosxr.devices.configuration.banners == [{'banner':'login', 'text':'Authorized users only.'}]
+              - iosxr_effective_model.iosxr.devices.configuration.ntp.servers == [{'server':'device'}]
+              - iosxr_effective_model.iosxr.devices.configuration.bgp.route_policies.keys() | sort == ['GROUP', 'LOCAL', 'SHARED']
+              - iosxr_effective_model.iosxr.devices.configuration.bgp.route_policies.SHARED.statements == 'drop'
+              - not iosxr_effective_model.iosxr.devices.configuration.bgp.enabled
+              - not iosxr_effective_model.iosxr.devices.configuration.isis.enabled
+              - iosxr_effective_model.iosxr.devices.configuration.interfaces == [{'name':'GigabitEthernet0/0/0/1', 'mtu':1500, 'enabled':true}]
+
+        - name: Verify named route policies render from the resolved model
+          ansible.builtin.assert:
+            that:
+              - "'route-policy GROUP\n  pass\nend-policy' in model_test_rendered_policies"
+              - "'route-policy LOCAL\n  drop\nend-policy' in model_test_rendered_policies"
+              - "'route-policy SHARED\n  drop\nend-policy' in model_test_rendered_policies"
+          vars:
+            iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp }}"
+            model_test_rendered_policies: >-
+              {{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/iosxr_bgp/templates/route_policies.j2') }}
+
+        - name: Remove device overrides
+          ansible.builtin.file:
+            path: "{{ model_test_directory.path }}/30-device.yaml"
+            state: absent
+
+        - name: Resolve group precedence
+          ansible.builtin.include_role:
+            name: iosxr_model
+          vars:
+            iosxr_model_directories: ["{{ model_test_directory.path }}"]
+
+        - name: Verify later group wins and previous resolution is cleared
+          ansible.builtin.assert:
+            that:
+              - iosxr_effective_model.iosxr.devices.configuration.ntp.servers == [{'server':'second'}]
+              - iosxr_effective_model.iosxr.devices.configuration.bgp.enabled
+              - iosxr_effective_model.iosxr.devices.configuration.isis.enabled
+              - "'hostname' not in iosxr_effective_model.iosxr.devices.configuration"
+              - "'interfaces' not in iosxr_effective_model.iosxr.devices.configuration"
+
+        - name: Remove group membership
+          ansible.builtin.file:
+            path: "{{ model_test_directory.path }}/20-membership.yaml"
+            state: absent
+
+        - name: Resolve global precedence
+          ansible.builtin.include_role:
+            name: iosxr_model
+          vars:
+            iosxr_model_directories: ["{{ model_test_directory.path }}"]
+
+        - name: Verify global overrides defaults
+          ansible.builtin.assert:
+            that:
+              - iosxr_effective_model.iosxr.devices.configuration.ntp.servers == [{'server':'global'}]
+              - iosxr_effective_model.iosxr.devices.configuration.bgp.enabled | default(false) == false
+              - iosxr_effective_model.iosxr.devices.configuration.isis.enabled | default(false) == false
+
+        - name: Remove global configuration
+          ansible.builtin.file:
+            path: "{{ model_test_directory.path }}/10-global.yaml"
+            state: absent
+
+        - name: Resolve defaults alone
+          ansible.builtin.include_role:
+            name: iosxr_model
+          vars:
+            iosxr_model_directories: ["{{ model_test_directory.path }}"]
+
+        - name: Verify defaults remain
+          ansible.builtin.assert:
+            that:
+              - iosxr_effective_model.iosxr.devices.configuration.ntp.servers == [{'server':'default'}]
+
+        - name: Write an invalid device group reference
+          ansible.builtin.copy:
+            dest: "{{ model_test_directory.path }}/40-invalid.yml"
+            mode: "0600"
+            content: >-
+              {{ {'iosxr': {'devices': {'localhost': {'device_groups': ['missing']}}}} | to_nice_yaml }}
+
+        - name: Reject undefined device groups
+          block:
+            - name: Resolve invalid group reference
+              ansible.builtin.include_role:
+                name: iosxr_model
+              vars:
+                iosxr_model_directories: ["{{ model_test_directory.path }}"]
+            - name: Fail if invalid group was accepted
+              ansible.builtin.fail:
+                msg: Invalid device group was accepted
+          rescue:
+            - name: Verify the intended validation rejected the reference
+              ansible.builtin.assert:
+                that:
+                  - "'references an undefined device group' in ansible_failed_result.msg"
+      always:
+        - name: Remove temporary model directory
+          ansible.builtin.file:
+            path: "{{ model_test_directory.path }}"
+            state: absent
+
+- name: Verify migrated example inventory without a device connection
+  hosts: provider_ix_pop
+  gather_facts: false
+  roles:
+    - iosxr_model
+  tasks:
+    - name: Verify example configuration survived the migration
+      ansible.builtin.assert:
+        that:
+          - iosxr_model_selected_device_groups == ['provider_ix_pop']
+          - iosxr_model_effective.iosxr.devices.configuration.hostname == inventory_hostname
+          - iosxr_model_effective.iosxr.devices.configuration.ntp.servers == [{'server':'198.18.128.1', 'vrf':'management'}]
+          - iosxr_model_effective.iosxr.devices.configuration.bgp.as_number == 64520
+          - iosxr_model_effective.iosxr.devices.configuration.bgp.enabled
+          - iosxr_model_effective.iosxr.devices.configuration.bgp.route_policies['EBGP-ACCEPT-ALL'].statements == 'pass'
+          - iosxr_model_effective.iosxr.devices.configuration.interfaces | length == 2
+          - iosxr_model_effective.iosxr.devices.configuration.l3_interfaces | length == 2
+          - iosxr_model_effective.iosxr.devices.configuration.banners | length == 2

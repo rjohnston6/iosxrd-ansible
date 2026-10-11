@@ -1,0 +1,4 @@
+---
+iosxr:
+  devices:
+    ix-pop: {}

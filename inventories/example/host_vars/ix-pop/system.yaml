@@ -1,0 +1,13 @@
+---
+iosxr:
+  devices:
+    ix-pop:
+      configuration:
+        hostname: ix-pop
+        banners:
+          - banner: login
+            text: |-
+              @Authorized users only. Unauthorized access is prohibited.@
+          - banner: motd
+            text: |-
+              @Authorized access only. Activity may be monitored.@

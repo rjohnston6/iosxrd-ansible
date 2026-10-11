@@ -25,40 +25,182 @@ address when using a different device. The inventory includes the non-secret
 SSH username; supply passwords through the interactive prompt, Ansible Vault,
 or an external secrets provider, not in inventory files.
 
+The play defaults to inventory group `provider_ix_pop`. Select another provider
+explicitly, then optionally narrow it with `--limit`:
+
+```bash
+ansible-playbook -i inventories/example/hosts.yaml playbooks/site.yaml \
+  -e iosxr_target_hosts=my_provider --list-hosts
+ansible-playbook -i inventories/example/hosts.yaml playbooks/site.yaml \
+  -e iosxr_target_hosts=my_provider --limit my_router --check --diff -k
+```
+
+Replace `my_provider` and `my_router` with your inventory group and host names.
+Remove `--check` to apply after inspecting the proposed changes. The temporary
+MTC inventory has been removed; offline test fixtures are independent of it.
+
 ## Data model and roles
 
-The example follows the NetAsCode IOS-XR shape: configuration is rooted at
-`iosxr.devices.configuration`, with shared defaults and device-level data kept
-separate from the playbook. It extends that pattern with provider and region
-layers using Ansible inventory groups:
+The model uses one `iosxr` root with `defaults`, `global`, `device_groups`,
+`devices`, and `interface_groups`. Devices and groups are mappings keyed by
+stable names, so separate files can contribute features to the same entry.
+This is an Ansible-oriented adaptation of NetAsCode, not a guarantee of exact
+schema compatibility. Each inventory group and host has a variable directory:
 
 ```text
 inventories/example/
   hosts.yaml
   group_vars/
-    all.yaml
-    provider_ix_pop.yaml
+    all/
+      connection.yaml
+      route_policies.yaml
+    provider_ix_pop/
+      defaults.yaml
+      devices.yaml
+      ntp.yaml
   host_vars/
-    ix-pop.yaml
+    ix-pop/
+      system.yaml
+      interfaces.yaml
+      bgp.yaml
 ```
 
-`playbooks/site.yaml` combines the model in this order: global defaults,
-provider, optional region, then device. Nested mappings merge recursively;
-lists replace the inherited list. In the example, the provider NTP server list
-replaces the global default. A feature role consumes only the resulting
-`iosxr_effective_model`, not the hierarchy it came from.
-For example, banners declared in `group_vars/all.yaml` apply by default to all
-devices. If a provider, region, or device defines its own `banners` list, that
-list replaces the inherited list rather than appending to it.
-For architecture decisions, current validation status, and planned topology
-work, see [ARCHITECTURE.md](ARCHITECTURE.md).
+### Split files and precedence
+
+Normal Ansible variable precedence can discard earlier definitions of `iosxr`.
+The `iosxr_model` role loads each file into an isolated namespace and assembles
+its contribution explicitly, without relying on `hash_behaviour=merge` or the
+final inventory value of `iosxr`. Connection settings remain ordinary inventory
+variables; files without `iosxr` contribute nothing to the model.
+
+Default discovery reads direct `.yaml` and `.yml` children of `group_vars/all/`,
+then directories for the host's inventory groups alphabetically, then
+`host_vars/<inventory_hostname>/`. Files within each directory are sorted by
+filename. Later fragments override earlier fragments within the same scope.
+Missing directories are skipped. Legacy single-file group/host model variables
+are not loaded. Set `iosxr_model_directories` to an ordered list of absolute
+directories to load a separate model library instead of the default directories.
+
+Collected configuration resolves from lowest to highest precedence:
+
+1. `iosxr.defaults.configuration`
+2. `iosxr.global.configuration`
+3. Selected `iosxr.device_groups.<name>.configuration`, in order
+4. `iosxr.devices.<inventory_hostname>.configuration`
+
+Matching inventory group names select modeled device groups alphabetically by
+default. A device's `device_groups` list replaces that selection with explicit
+ordering; later groups win. `[]` disables group inheritance. Selected groups
+must exist in the loaded model. A reference does not automatically load another
+inventory group's directory: use inventory membership or explicit directories.
+
+Mappings merge recursively. Configuration lists, including NTP servers,
+interfaces, and banners, replace rather than append or merge by item, both
+within a scope and across scopes. Split different features across files, but
+keep each interface/server list together. Named route-policy mappings merge
+additively. The example provider NTP list replaces the default list.
+
+### Adding devices and groups
+
+Add the device to its group in `hosts.yaml`, add a named device entry in that
+group's `devices.yaml`, then create feature files in `host_vars/<device>/`.
+No global configuration file needs to change. Explicit model membership can
+be declared separately from feature configuration:
+
+```yaml
+iosxr:
+  devices:
+    ix-pop:
+      device_groups:
+        - provider_ix_pop
+```
+
+A separate group feature file contributes to the same named group:
+
+```yaml
+iosxr:
+  device_groups:
+    provider_ix_pop:
+      configuration:
+        ntp:
+          servers:
+            - server: 198.18.128.1
+              vrf: management
+```
+
+### Interface groups
+
+Interface groups provide reusable metadata for `configuration.interfaces`.
+Referenced groups merge in list order, followed by explicit interface settings.
+Undefined references fail validation; membership is stripped from module input:
+
+```yaml
+iosxr:
+  interface_groups:
+    uplink:
+      configuration:
+        enabled: true
+        mtu: 9000
+  devices:
+    ix-pop:
+      configuration:
+        interfaces:
+          - name: GigabitEthernet0/0/0/1
+            interface_groups: [uplink]
+            mtu: 1500
+```
+
+Interface-group inheritance currently covers metadata, not the separate
+`l3_interfaces` addressing list or protocol interface configuration.
+
+Feature roles consume only the resulting `iosxr_effective_model`, retaining
+the internal `iosxr.devices.configuration` shape regardless of input scopes.
+For field-level scope and feature documentation, see [DATA_MODEL.md](DATA_MODEL.md).
+For architecture decisions, validation status, and topology work, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`,
 `iosxr_isis`, and `iosxr_bgp` roles. The system role applies the modeled
 hostname and banners; the device example includes login and MOTD banners.
-IS-IS remains a no-op unless
-`isis.processes` is supplied in the effective model. BGP is a no-op unless
-`bgp` is supplied.
+IS-IS runs only with effective `isis.enabled: true` and modeled processes.
+All BGP tasks, including route policies, require effective `bgp.enabled: true`.
+Missing activation flags default to false, even when protocol data is inherited.
+
+### Protocol participation
+
+Keep shared BGP/IS-IS settings and route policies in defaults or global without
+enabling them there. Enable protocols only for participating device groups or
+individual devices. For example, a PE group can opt into both protocols:
+
+```yaml
+iosxr:
+  device_groups:
+    pe:
+      configuration:
+        bgp:
+          enabled: true
+        isis:
+          enabled: true
+```
+
+P routers outside this group need no BGP stanza to skip inherited BGP settings
+and policies. They can inherit `isis.enabled: true` from a separate core group.
+Select these groups through inventory membership or the device's explicit
+`device_groups` list, and ensure their definitions are in loaded directories.
+
+Activation follows normal precedence: defaults, global, ordered device groups,
+then device. A device-level `enabled: false` overrides an inherited opt-in.
+If a shared provider/core group includes both P and PE routers, do not enable
+BGP on that shared group; enable it on the PE-only group instead.
+
+This is a behavior change: existing protocol models need `enabled: true` to
+continue applying configuration. The example BGP device and standalone IS-IS
+model have been updated. False or omitted flags skip management; they do not
+remove existing protocol configuration from the router. Other features still
+run normally.
+
+### Interface configuration
+
 The `iosxr_l3_interfaces` role consumes a list of named interfaces. Each entry
 can define IPv4 addresses, IPv6 addresses, or both; the same structure applies
 to physical interfaces and loopbacks. Interface descriptions and Ethernet MTU
@@ -126,9 +268,77 @@ shows an L2-only provider process with a NET, IPv4/IPv6 unicast address
 families, wide metrics, a passive loopback, and a point-to-point physical
 interface. It is deliberately not loaded by the `ix-pop` example inventory or
 the `ix-pop` model; use it only with an IOS-XR device intended for IS-IS. The
-default playbook includes the role, but it does nothing without an IS-IS process
-in the effective model. No IS-IS configuration or adjacency was tested on the
-CML XRd device.
+default playbook includes the role, but it does nothing without
+`isis.enabled: true` and an IS-IS process in the effective model.
+IS-IS was not applied to the original `ix-pop` example. In the later MTC XRd
+topology, basic configuration and enabled IS-IS setup were validated. This does
+not establish adjacency, route exchange, or TI-LFA recovery; see the validation
+record in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+Each IS-IS process is rendered as one hierarchical configuration by
+`roles/iosxr_isis/templates/process.j2`. Process address families support
+`metric_style` (default `wide`), `microloop_avoidance: segment-routing` for
+`microloop avoidance segment-routing`. The microloop value is an IOS-XR command
+suffix, allowing other platform-supported options. Omitted or empty microloop
+values do not emit the optional command. No `multi-topology` command is emitted
+for IOS-XR. The previous boolean
+`microloop_avoidance_sr` field is no longer consumed.
+
+Interface address families accept either the original strings (`ipv4`, `ipv6`)
+or mappings. Names may include `unicast`; the role does not append it twice.
+Mappings can supply an ordered `fast-reroute` list:
+
+```yaml
+isis:
+  enabled: true
+  processes:
+    - name: CORE
+      net: 49.0001.0000.0000.0011.00
+      is_type: level-2-only
+      address_families:
+        - name: ipv4
+          metric_style: wide
+          microloop_avoidance: segment-routing
+        - name: ipv6
+          metric_style: wide
+          microloop_avoidance: segment-routing
+      interfaces:
+        - name: Loopback0
+          passive: true
+          address_families:
+            - name: ipv4 unicast
+            - name: ipv6 unicast
+        - name: GigabitEthernet0/0/0/0
+          point_to_point: true
+          address_families:
+            - name: ipv6 unicast
+              fast-reroute:
+                - per-prefix
+                - per-prefix ti-lfa
+```
+
+Place this under the chosen device or device group's `configuration`, and use
+a unique NET per router. `passive`, `point_to_point`, and `circuit_type` remain
+supported interface attributes. Process/interface/AF lists still replace
+inherited lists rather than merge by name.
+
+For IOS-XRd labs, explicitly configure `hello-padding: disable` on participating
+GigabitEthernet IS-IS interfaces (at the same level as `point_to_point`), which
+renders `hello-padding disable`. The role checks `show version` when IS-IS is enabled and processes
+are modeled. On XRd, active non-loopback interfaces without a hello-padding
+field produce a warning and configuration continues without injecting a default.
+Passive interfaces and loopbacks do not warn. An explicit value is respected.
+Disabling padding can avoid oversized hellos on virtual links; it is not proof
+that adjacency will form. Check MTUs, peer configuration, and connectivity too.
+
+Fast-reroute entries are IOS-XR command suffixes, not a generic CLI block; each
+renders as `fast-reroute <entry>` within its interface AF. These controls alone
+do not enable SRv6: locator configuration, IS-IS SRv6 advertisement, platform
+support, and TI-LFA operation need separate modeling and device verification.
+Configuration remains additive; omitting settings or setting a flag false does
+not remove previously deployed commands. `make model-test` verifies exact CLI
+rendering, legacy AFs, empty microloop values, device fixtures, and XRd warnings
+offline. These tests do not validate router acceptance or operational recovery.
 
 ### BGP modeling
 
@@ -150,8 +360,9 @@ address is not modeled, it warns and omits the router ID.
 
 Route policies are mappings keyed by policy name, so recursive scope merging
 preserves policies declared at broader scopes and lets a host add or override
-one by name. `EBGP-ACCEPT-ALL` is defined in `group_vars/all.yaml` and inherited
-by the CML device. Attach each policy under the relevant peer-group or neighbor
+one by name. `EBGP-ACCEPT-ALL` is defined in
+`group_vars/all/route_policies.yaml` and inherited by the CML device.
+Attach each policy under the relevant peer-group or neighbor
 address family; defining a policy alone does not apply it. For example, a host
 can add a route policy with multiple conditional branches:
 
@@ -248,3 +459,8 @@ Reference: [NetAsCode IOS-XR data models](https://netascode.cisco.com/docs/data_
 - Pre-commit runs both lint checks on every commit; `uv run pre-commit run --all-files`
   runs them manually across the repository.
 - `make syntax-check` checks playbook syntax without connecting to devices.
+- `make model-test` verifies split fragments, precedence, interface groups,
+  invalid references, migrated example configuration, and protocol participation
+  gates without device access.
+- `make model-check` resolves the example inventory only; configuration roles
+  are excluded by `--tags model`, so it performs no device configuration.

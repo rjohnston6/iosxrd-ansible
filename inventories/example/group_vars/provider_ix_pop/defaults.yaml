@@ -1,0 +1,7 @@
+---
+iosxr:
+  defaults:
+    configuration:
+      ntp:
+        servers:
+          - server: 192.0.2.123

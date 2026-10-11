@@ -1,0 +1,24 @@
+---
+iosxr:
+  devices:
+    ix-pop:
+      configuration:
+        interfaces:
+          - name: GigabitEthernet0/0/0/1
+            description: << To mtc-core-02 gi0/0/0/2 >>
+            enabled: true
+            mtu: 1500
+          - name: Loopback0
+            description: << Router ID >>
+            enabled: true
+        l3_interfaces:
+          - name: GigabitEthernet0/0/0/1
+            ipv4:
+              - address: 198.19.1.0/31
+            ipv6:
+              - address: 2001:db8:5555:2000::1/64
+          - name: Loopback0
+            ipv4:
+              - address: 198.19.0.1/31
+            ipv6:
+              - address: 2001:db8:5555::1/128

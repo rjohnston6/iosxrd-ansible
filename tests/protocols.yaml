@@ -1,0 +1,85 @@
+---
+- name: Verify nonparticipating routers never configure inherited protocols
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    iosxr_effective_model:
+      iosxr:
+        devices:
+          configuration:
+            bgp: "{{ protocol_test_bgp | combine(protocol_test_activation) }}"
+            isis: "{{ protocol_test_isis | combine(protocol_test_activation) }}"
+    iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp }}"
+    protocol_test_isis:
+      processes:
+        - name: CORE
+          net: 49.0001.1921.6800.1001.00
+    protocol_test_bgp:
+      as_number: 64520
+      route_policies:
+        SHARED: {statements: pass}
+      address_families:
+        - afi: ipv4
+          safi: unicast
+      peer_groups:
+        - name: CORE
+          remote_as: 64520
+          address_family:
+            - afi: ipv4
+              safi: unicast
+              encapsulation_type_srv6: true
+      global:
+        neighbors:
+          - neighbor_address: 192.0.2.1
+      neighbor_address_families:
+        neighbors:
+          - neighbor_address: 192.0.2.1
+    protocol_test_activation: {}
+  tasks:
+    - name: Run BGP with inherited configuration but no opt-in
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Run IS-IS with inherited processes but no opt-in
+      ansible.builtin.include_role:
+        name: iosxr_isis
+
+    - name: Verify BGP initialization was skipped
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config is undefined
+          - iosxr_bgp_router_id_interfaces is undefined
+
+    - name: Explicitly disable protocols
+      ansible.builtin.set_fact:
+        protocol_test_activation: {enabled: false}
+
+    - name: Run explicitly disabled BGP
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Run explicitly disabled IS-IS
+      ansible.builtin.include_role:
+        name: iosxr_isis
+
+    - name: Verify explicit disable skipped BGP initialization
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config is undefined
+          - iosxr_bgp_router_id_interfaces is undefined
+
+    - name: Enable BGP with no device configuration tasks required
+      ansible.builtin.set_fact:
+        protocol_test_activation: {enabled: true}
+        protocol_test_bgp: {as_number: 64520}
+
+    - name: Run enabled BGP initialization
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Verify enabled BGP is not skipped
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config == {}
+          - iosxr_bgp_router_id_interfaces == []

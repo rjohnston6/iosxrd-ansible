@@ -1,0 +1,97 @@
+---
+- name: Initialize model assembly
+  ansible.builtin.set_fact:
+    iosxr_model_files: []
+    iosxr_model_assembled: {}
+    iosxr_model_resolved_interfaces: []
+
+- name: Discover model fragments
+  ansible.builtin.set_fact:
+    iosxr_model_files: >-
+      {{ iosxr_model_files +
+         ((query('ansible.builtin.fileglob', model_directory ~ '/*.yaml') +
+           query('ansible.builtin.fileglob', model_directory ~ '/*.yml')) | sort) }}
+  loop: >-
+    {{ iosxr_model_directories | default(
+         [inventory_dir ~ '/group_vars/all'] +
+         (group_names | sort | map('regex_replace', '^', inventory_dir ~ '/group_vars/') | list) +
+         [inventory_dir ~ '/host_vars/' ~ inventory_hostname]) }}
+  loop_control:
+    loop_var: model_directory
+
+- name: Load each fragment into an isolated namespace
+  ansible.builtin.include_vars:
+    file: "{{ model_file }}"
+    name: iosxr_model_fragment
+  loop: "{{ iosxr_model_files }}"
+  loop_control:
+    loop_var: model_file
+  register: iosxr_model_loaded
+
+- name: Assemble model fragments
+  ansible.builtin.set_fact:
+    iosxr_model_assembled: >-
+      {{ iosxr_model_assembled | combine(
+           loaded_fragment.ansible_facts.iosxr_model_fragment.iosxr | default({}),
+           recursive=True, list_merge='replace') }}
+  loop: "{{ iosxr_model_loaded.results }}"
+  loop_control:
+    loop_var: loaded_fragment
+    label: "{{ loaded_fragment.model_file }}"
+
+- name: Select device and inventory device groups
+  ansible.builtin.set_fact:
+    iosxr_model_selected_device: "{{ (iosxr_model_assembled.devices | default({})).get(inventory_hostname, {}) }}"
+    iosxr_model_inventory_device_groups: >-
+      {{ group_names | sort | select('in', iosxr_model_assembled.device_groups | default({})) | list }}
+
+- name: Select ordered device groups
+  ansible.builtin.set_fact:
+    iosxr_model_selected_device_groups: "{{ iosxr_model_selected_device.device_groups | default(iosxr_model_inventory_device_groups) }}"
+
+- name: Validate device group references
+  ansible.builtin.assert:
+    that:
+      - iosxr_model_selected_device_groups is sequence
+      - iosxr_model_selected_device_groups is not string
+      - iosxr_model_selected_device_groups | difference((iosxr_model_assembled.device_groups | default({})).keys() | list) | length == 0
+    fail_msg: "Device {{ inventory_hostname }} references an undefined device group."
+
+- name: Resolve defaults and global configuration
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_configuration: >-
+      {{ iosxr_model_assembled.defaults.configuration | default({}) | combine(
+           iosxr_model_assembled.global.configuration | default({}), recursive=True, list_merge='replace') }}
+
+- name: Resolve device group configuration in order
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_configuration: >-
+      {{ iosxr_model_resolved_configuration | combine(
+           iosxr_model_assembled.device_groups[device_group].configuration | default({}),
+           recursive=True, list_merge='replace') }}
+  loop: "{{ iosxr_model_selected_device_groups }}"
+  loop_control:
+    loop_var: device_group
+
+- name: Resolve device configuration
+  ansible.builtin.set_fact:
+    iosxr_model_resolved_configuration: >-
+      {{ iosxr_model_resolved_configuration | combine(
+           iosxr_model_selected_device.configuration | default({}), recursive=True, list_merge='replace') }}
+
+- name: Resolve interface group configuration
+  ansible.builtin.include_tasks: interface.yaml
+  loop: "{{ iosxr_model_resolved_configuration.interfaces | default([]) }}"
+  loop_control:
+    loop_var: model_interface
+    label: "{{ model_interface.name }}"
+
+- name: Publish the effective model for feature roles
+  ansible.builtin.set_fact:
+    iosxr_model_effective:
+      iosxr:
+        devices:
+          configuration: >-
+            {{ iosxr_model_resolved_configuration | combine(
+                 {'interfaces': iosxr_model_resolved_interfaces}
+                 if 'interfaces' in iosxr_model_resolved_configuration else {}) }}

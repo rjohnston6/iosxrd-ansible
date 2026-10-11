@@ -1,17 +1,13 @@
 ---
 - name: Configure IOS-XR devices
-  hosts: provider_ix_pop
+  hosts: "{{ iosxr_target_hosts | default('provider_ix_pop') }}"
   gather_facts: false
   vars:
-    iosxr_effective_model: >-
-      {{
-        (iosxr_model_defaults | default({}))
-        | combine(iosxr_model_provider | default({}), recursive=True)
-        | combine(iosxr_model_region | default({}), recursive=True)
-        | combine(iosxr_model_device | default({}), recursive=True)
-      }}
+    iosxr_effective_model: "{{ iosxr_model_effective }}"
     iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp | default({}) }}"
   roles:
+    - role: iosxr_model
+      tags: [model]
     - iosxr_system
     - iosxr_l3_interfaces
     - iosxr_ntp
