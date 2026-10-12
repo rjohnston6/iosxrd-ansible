@@ -8,6 +8,12 @@ router isis {{ iosxr_isis_process.name }}
 {% if address_family.microloop_avoidance | default('') %}
   microloop avoidance {{ address_family.microloop_avoidance }}
 {% endif %}
+{% if address_family.srv6.locators | default([]) | length > 0 %}
+  segment-routing srv6
+{% for locator_name in address_family.srv6.locators %}
+   locator {{ locator_name }}
+{% endfor %}
+{% endif %}
 {% endfor %}
 {% for model_interface in iosxr_isis_process.interfaces | default([]) %}
  interface {{ model_interface.name }}

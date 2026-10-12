@@ -24,6 +24,7 @@ model-test:
 	ansible-playbook -i inventories/example/hosts.yaml -i localhost, tests/model.yaml
 	ansible-playbook -i localhost, tests/protocols.yaml
 	ansible-playbook -i localhost, tests/isis.yaml
+	ansible-playbook -i localhost, tests/srv6.yaml
 
 model-check:
 	ansible-playbook -i inventories/example/hosts.yaml playbooks/site.yaml --tags model

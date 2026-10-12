@@ -363,6 +363,21 @@ not remove previously deployed commands. `make model-test` verifies exact CLI
 rendering, legacy AFs, empty microloop values, device fixtures, and XRd warnings
 offline. These tests do not validate router acceptance or operational recovery.
 
+### SRv6 locators and IS-IS advertisement
+
+SRv6 is independently opt-in with `configuration.srv6.enabled: true`.
+Named `srv6.locators` mappings define each locator's `prefix`; groups can enable
+SRv6 while devices supply their unique /64. The new `iosxr_srv6` role configures
+locators before IS-IS. Under the IS-IS IPv6 process AF, `srv6.locators` is a list
+of local locator names to advertise. Undefined references, non-IPv6 AFs, and
+advertisements with disabled local SRv6 are rejected.
+
+See [examples/srv6-model.yaml](examples/srv6-model.yaml) for a BGP-free P router
+and [DATA_MODEL.md](DATA_MODEL.md) for scope/field details. The example is not
+loaded by active inventory, and IX-POP remains unchanged because it does not
+support SRv6. Rendering and reference tests are offline; no SRv6 deployment,
+SID/service programming, or operational reachability is claimed.
+
 ### BGP modeling
 
 `iosxr_bgp` composes the installed IOS-XR BGP global, address-family,

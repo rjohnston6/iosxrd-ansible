@@ -236,6 +236,63 @@ FRR and microloop controls do not provide full SRv6 deployment. Locators,
 IS-IS SRv6 advertisement, platform support, and repair-path verification remain
 separate work. Omitting an option does not remove an existing CLI command.
 
+## SRv6 Locators And Underlay
+
+SRv6 uses `configuration.srv6` at any configuration scope. It defaults to
+disabled. Groups can supply activation and reusable locator definitions; devices
+should supply unique prefixes. Locator mappings merge by name across scopes:
+
+```yaml
+iosxr:
+  device_groups:
+    srv6_core:
+      configuration:
+        srv6:
+          enabled: true
+  devices:
+    srv6-p-101:
+      device_groups: [srv6_core]
+      configuration:
+        srv6:
+          locators:
+            MAIN_LOCATOR:
+              prefix: 2001:db8:1f00:101::/64
+```
+
+The `iosxr_srv6` role renders `segment-routing / srv6 / locators` and each
+`locator <name>` / prefix pair before the IS-IS role runs. Names may contain
+letters, digits, and underscores; hyphens are rejected by validation. Prefix validation checks CIDR shape and length
+range and uses Python's standard-library IPv6 parser. Locator prefixes are
+rendered in canonical compressed form, so padded hextets such as `0011` become
+`11`, matching IOS-XR running-config. Prefixes must be network-aligned CIDRs;
+host bits are rejected. Uniqueness and summary allocation are not checked.
+Allocate a unique /64 per node from the intended summary block; duplicates
+across devices are not automatically detected.
+
+Under a modeled IS-IS process's IPv6 AF, add:
+
+```yaml
+address_families:
+  - name: ipv6
+    metric_style: wide
+    srv6:
+      locators: [MAIN_LOCATOR]
+```
+
+This renders `segment-routing srv6` and the locator reference under IPv6 unicast.
+IS-IS must also be enabled. References to undefined local locators, disabled
+local SRv6, or non-IPv6-unicast AFs fail validation before IS-IS device access.
+Empty/absent reference lists emit no advertisement block. The locator role has
+its own opt-in gate; disabled SRv6 does not remove existing configuration.
+
+The standalone [SRv6 example](examples/srv6-model.yaml) is a BGP-free P-router
+model, not active inventory. It includes process identity to compose with the
+existing IS-IS role; add the participating interfaces for your topology.
+IS-IS process and AF lists still replace inherited lists, not merge by name.
+No SRv6 data is added to IX-POP, which does not support SRv6. Tests run offline
+only. This slice does not implement SID formats, services, SR policies, or
+end-to-end repair; platform and operational validation remain required.
+
 ## BGP
 
 | Field under `configuration.bgp` | Shape and purpose |

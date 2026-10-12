@@ -1,4 +1,12 @@
 ---
+- name: Validate IS-IS SRv6 references before device access
+  ansible.builtin.include_tasks: srv6.yaml
+  loop: "{{ iosxr_effective_model.iosxr.devices.configuration.isis.processes | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_process
+    label: "{{ iosxr_isis_process.name }}"
+  when: iosxr_effective_model.iosxr.devices.configuration.isis.enabled | default(false) | bool
+
 - name: Check IOS-XR platform for IS-IS hello padding
   cisco.iosxr.iosxr_command:
     commands:

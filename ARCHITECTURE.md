@@ -124,6 +124,8 @@ live protocol application and operational state still require topology testing.
   MTU, and `cisco.iosxr.iosxr_l3_interfaces` for IPv4/IPv6 addresses.
 - `iosxr_ntp` uses `cisco.iosxr.iosxr_ntp_global`. It skips NTP on XRd because
   the CML XRd image rejects the NTP CLI used by the resource module.
+- `iosxr_srv6` renders named locator prefixes using `iosxr_config`, gated by
+  `srv6.enabled`. It runs before IS-IS; active IX-POP inventory does not enable it.
 - `iosxr_isis` uses `cisco.iosxr.iosxr_config` because the installed collection
   has no IS-IS resource module. It is a no-op unless `isis.enabled` is true
   and `isis.processes` is modeled. `examples/isis-model.yaml` is a standalone
@@ -172,6 +174,27 @@ the unsupported `multi-topology` command. New commands still
 require platform acceptance and operational verification, including adjacency,
 IPv4/IPv6 routes, and TI-LFA repair paths. FRR/microloop options alone are not
 complete SRv6 support; locators and IS-IS SRv6 advertisement remain separate.
+
+## SRv6 Locator Model
+
+`configuration.srv6.enabled` is an independent opt-in gate. Locators are a
+name-keyed mapping with IPv6 CIDR `prefix` fields, allowing group activation
+and per-device prefix overrides. The locator role precedes IS-IS and uses a
+hierarchical CLI template because no dedicated collection resource module is
+installed. This first slice implements only the supplied locator hierarchy.
+
+IS-IS IPv6 process AFs reference local locators through `srv6.locators` lists.
+Validation rejects undefined references, disabled local SRv6, and non-IPv6 AFs
+before IS-IS device access. Locator checks validate name/CIDR shape and prefix
+length, not full address validity, cross-device uniqueness, or summary allocation.
+Existing recursive map/list-replacement semantics apply. There is no deletion
+or auto-allocation behavior, and P routers do not need BGP enabled.
+
+The isolated example and offline tests cover exact CLI hierarchy, group/device
+composition, absent/disabled gating, and invalid references. IX-POP must not be
+used for SRv6 deployment: it lacks support, and its active model is unchanged.
+SRv6 SID formats, services, policies, and operational validation remain future
+work. No live SRv6 configuration has been applied by this implementation.
 
 ## BGP Model
 

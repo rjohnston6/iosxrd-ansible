@@ -11,5 +11,6 @@
     - iosxr_system
     - iosxr_l3_interfaces
     - iosxr_ntp
+    - iosxr_srv6
     - iosxr_isis
     - iosxr_bgp

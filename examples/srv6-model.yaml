@@ -1,0 +1,26 @@
+---
+iosxr:
+  device_groups:
+    srv6_core:
+      configuration:
+        srv6:
+          enabled: true
+  devices:
+    srv6-p-101:
+      device_groups: [srv6_core]
+      configuration:
+        srv6:
+          locators:
+            MAIN_LOCATOR:
+              prefix: 2001:db8:1f00:101::/64
+        isis:
+          enabled: true
+          processes:
+            - name: CORE
+              net: 49.0001.0000.0000.0101.00
+              is_type: level-2-only
+              address_families:
+                - name: ipv6
+                  metric_style: wide
+                  srv6:
+                    locators: [MAIN_LOCATOR]
