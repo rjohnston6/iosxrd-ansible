@@ -255,13 +255,13 @@ iosxr:
       configuration:
         srv6:
           locators:
-            MAIN-LOCATOR:
+            MAIN_LOCATOR:
               prefix: 2001:db8:1f00:101::/64
 ```
 
 The `iosxr_srv6` role renders `segment-routing / srv6 / locators` and each
-name/prefix pair before the IS-IS role runs. Names must contain only letters,
-digits, underscores, or hyphens. Prefix validation checks CIDR shape and length
+`locator <name>` / prefix pair before the IS-IS role runs. Names may contain
+letters, digits, and underscores; hyphens are rejected by validation. Prefix validation checks CIDR shape and length
 range, not complete IPv6 validity, uniqueness, or summary allocation. Allocate
 a unique /64 per node from the intended summary block; duplicates across
 devices are not automatically detected.
@@ -273,7 +273,7 @@ address_families:
   - name: ipv6
     metric_style: wide
     srv6:
-      locators: [MAIN-LOCATOR]
+      locators: [MAIN_LOCATOR]
 ```
 
 This renders `segment-routing srv6` and the locator reference under IPv6 unicast.

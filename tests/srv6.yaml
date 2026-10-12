@@ -12,7 +12,7 @@
       segment-routing
        srv6
         locators
-         MAIN-LOCATOR
+         locator MAIN_LOCATOR
           prefix 2001:db8:1f00:101::/64
     srv6_test_expected_isis: |-
       router isis CORE
@@ -21,7 +21,7 @@
        address-family ipv6 unicast
         metric-style wide
         segment-routing srv6
-         locator MAIN-LOCATOR
+         locator MAIN_LOCATOR
   tasks:
     - name: Load isolated SRv6 example
       ansible.builtin.include_vars:
@@ -53,6 +53,35 @@
       vars:
         iosxr_isis_process: "{{ srv6_test_configuration.isis.processes[0] }}"
 
+    - name: Verify hyphens are rejected in locator names
+      block:
+        - name: Set invalid locator model
+          ansible.builtin.set_fact:
+            srv6_test_configuration:
+              srv6:
+                enabled: true
+                locators:
+                  MAIN-LOCATOR:
+                    prefix: 2001:db8:1f00:101::/64
+        - name: Validate invalid locator name
+          ansible.builtin.include_role:
+            name: iosxr_srv6
+            tasks_from: validate.yaml
+        - name: Fail if invalid locator name was accepted
+          ansible.builtin.fail:
+            msg: Locator name containing a hyphen was accepted.
+      rescue:
+        - name: Verify invalid locator name was rejected
+          ansible.builtin.assert:
+            that:
+              - "'Locator MAIN-LOCATOR requires a name' in ansible_failed_result | to_json"
+
+    - name: Restore valid underscore locator model
+      ansible.builtin.set_fact:
+        srv6_test_configuration: >-
+          {{ srv6_test_example.iosxr.device_groups.srv6_core.configuration | combine(
+               srv6_test_example.iosxr.devices['srv6-p-101'].configuration, recursive=True) }}
+
     - name: Reject invalid IS-IS SRv6 advertisement
       block:
         - name: Validate invalid advertisement references
@@ -83,7 +112,7 @@
               address_families:
                 - name: ipv4
                   srv6:
-                    locators: [MAIN-LOCATOR]
+                    locators: [MAIN_LOCATOR]
         - name: Fail if IPv4 advertisement was accepted
           ansible.builtin.fail:
             msg: IPv4 advertisement was accepted.
@@ -102,14 +131,14 @@
               srv6:
                 enabled: false
                 locators:
-                  MAIN-LOCATOR:
+                  MAIN_LOCATOR:
                     prefix: 2001:db8:1f00:101::/64
             iosxr_isis_process:
               name: CORE
               address_families:
                 - name: ipv6
                   srv6:
-                    locators: [MAIN-LOCATOR]
+                    locators: [MAIN_LOCATOR]
         - name: Fail if disabled local SRv6 was accepted
           ansible.builtin.fail:
             msg: Disabled local SRv6 was accepted.
@@ -133,7 +162,7 @@
           srv6:
             enabled: false
             locators:
-              MAIN-LOCATOR:
+              MAIN_LOCATOR:
                 prefix: 2001:db8:1f00:101::/64
 
     - name: Verify disabled SRv6 never configures inherited locators

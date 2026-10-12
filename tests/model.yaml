@@ -50,7 +50,7 @@
                       srv6:
                         enabled: true
                         locators:
-                          MAIN-LOCATOR: {}
+                          MAIN_LOCATOR: {}
                       bgp:
                         enabled: true
                         route_policies:
@@ -73,7 +73,7 @@
                       hostname: test-router
                       srv6:
                         locators:
-                          MAIN-LOCATOR:
+                          MAIN_LOCATOR:
                             prefix: 2001:db8:1f00:101::/64
                       ntp:
                         servers: [server: device]
@@ -100,7 +100,7 @@
               - iosxr_model_selected_device_groups == ['first', 'second']
               - iosxr_effective_model.iosxr.devices.configuration.hostname == 'test-router'
               - iosxr_effective_model.iosxr.devices.configuration.srv6.enabled
-              - iosxr_effective_model.iosxr.devices.configuration.srv6.locators['MAIN-LOCATOR'].prefix == '2001:db8:1f00:101::/64'
+              - iosxr_effective_model.iosxr.devices.configuration.srv6.locators['MAIN_LOCATOR'].prefix == '2001:db8:1f00:101::/64'
               - iosxr_effective_model.iosxr.devices.configuration.banners == [{'banner':'login', 'text':'Authorized users only.'}]
               - iosxr_effective_model.iosxr.devices.configuration.ntp.servers == [{'server':'device'}]
               - iosxr_effective_model.iosxr.devices.configuration.bgp.route_policies.keys() | sort == ['GROUP', 'LOCAL', 'SHARED']

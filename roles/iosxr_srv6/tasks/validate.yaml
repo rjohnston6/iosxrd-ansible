@@ -8,7 +8,7 @@
 - name: Validate SRv6 locator definitions
   ansible.builtin.assert:
     that:
-      - iosxr_srv6_locator.key is match('^[A-Za-z0-9_-]+$')
+      - iosxr_srv6_locator.key is match('^[A-Za-z0-9_]+$')
       - iosxr_srv6_locator.value is mapping
       - iosxr_srv6_locator.value.prefix is defined
       - iosxr_srv6_locator.value.prefix is string

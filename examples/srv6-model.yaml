@@ -11,7 +11,7 @@ iosxr:
       configuration:
         srv6:
           locators:
-            MAIN-LOCATOR:
+            MAIN_LOCATOR:
               prefix: 2001:db8:1f00:101::/64
         isis:
           enabled: true
@@ -23,4 +23,4 @@ iosxr:
                 - name: ipv6
                   metric_style: wide
                   srv6:
-                    locators: [MAIN-LOCATOR]
+                    locators: [MAIN_LOCATOR]
