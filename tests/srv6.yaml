@@ -53,6 +53,27 @@
       vars:
         iosxr_isis_process: "{{ srv6_test_configuration.isis.processes[0] }}"
 
+    - name: Supply an IPv6 prefix with padded hextets
+      ansible.builtin.set_fact:
+        srv6_test_configuration: >-
+          {{ srv6_test_configuration | combine(
+               {'srv6': {'locators': {'MAIN_LOCATOR': {'prefix': '2001:db8:1f00:0011::/64'}}}},
+               recursive=True) }}
+
+    - name: Validate padded locator prefix
+      ansible.builtin.include_role:
+        name: iosxr_srv6
+        tasks_from: validate.yaml
+
+    - name: Verify locator rendering uses canonical IPv6 prefix
+      ansible.builtin.assert:
+        that:
+          - "'prefix 2001:db8:1f00:11::/64' in srv6_test_rendered_locators"
+          - "'prefix 2001:db8:1f00:0011::/64' not in srv6_test_rendered_locators"
+      vars:
+        srv6_test_rendered_locators: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/iosxr_srv6/templates/locators.j2') }}
+
     - name: Verify hyphens are rejected in locator names
       block:
         - name: Set invalid locator model

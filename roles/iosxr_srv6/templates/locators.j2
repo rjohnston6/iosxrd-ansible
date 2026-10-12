@@ -3,5 +3,5 @@ segment-routing
   locators
 {% for locator_name, locator in iosxr_effective_model.iosxr.devices.configuration.srv6.locators | dictsort %}
    locator {{ locator_name }}
-    prefix {{ locator.prefix }}
+    prefix {{ locator.prefix | iosxr_ipv6_prefix }}
 {% endfor %}

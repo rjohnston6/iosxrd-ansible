@@ -262,9 +262,12 @@ iosxr:
 The `iosxr_srv6` role renders `segment-routing / srv6 / locators` and each
 `locator <name>` / prefix pair before the IS-IS role runs. Names may contain
 letters, digits, and underscores; hyphens are rejected by validation. Prefix validation checks CIDR shape and length
-range, not complete IPv6 validity, uniqueness, or summary allocation. Allocate
-a unique /64 per node from the intended summary block; duplicates across
-devices are not automatically detected.
+range and uses Python's standard-library IPv6 parser. Locator prefixes are
+rendered in canonical compressed form, so padded hextets such as `0011` become
+`11`, matching IOS-XR running-config. Prefixes must be network-aligned CIDRs;
+host bits are rejected. Uniqueness and summary allocation are not checked.
+Allocate a unique /64 per node from the intended summary block; duplicates
+across devices are not automatically detected.
 
 Under a modeled IS-IS process's IPv6 AF, add:
 

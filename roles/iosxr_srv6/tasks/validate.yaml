@@ -11,9 +11,7 @@
       - iosxr_srv6_locator.key is match('^[A-Za-z0-9_]+$')
       - iosxr_srv6_locator.value is mapping
       - iosxr_srv6_locator.value.prefix is defined
-      - iosxr_srv6_locator.value.prefix is string
-      - iosxr_srv6_locator.value.prefix is match('^[0-9A-Fa-f:]+/[0-9]{1,3}$')
-      - iosxr_srv6_locator.value.prefix.split('/')[1] | int <= 128
+      - iosxr_srv6_locator.value.prefix | iosxr_ipv6_prefix is string
     fail_msg: "Locator {{ iosxr_srv6_locator.key }} requires a name and IPv6 CIDR prefix."
   loop: "{{ iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({}) | dict2items }}"
   loop_control:
