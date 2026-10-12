@@ -1,0 +1,12 @@
+---
+- name: Add the modeled BGP route-reflector cluster ID
+  ansible.builtin.set_fact:
+    iosxr_bgp_global_config: >-
+      {{ iosxr_bgp_global_config | combine(
+           {'bgp': (iosxr_bgp_global_config.bgp | default({}))
+             | combine({'cluster_id': iosxr_bgp_model.cluster_id})},
+           recursive=True) }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_model.cluster_id is defined

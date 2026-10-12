@@ -22,16 +22,27 @@
       address_families:
         - afi: ipv4
           safi: unicast
-      peer_groups:
-        - name: CORE
+        - afi: ipv6
+          safi: unicast
+      neighbor_groups:
+        - name: CORE-V4
           remote_as: 64520
           address_family:
             - afi: ipv4
               safi: unicast
               encapsulation_type_srv6: true
-      global:
-        neighbors:
-          - neighbor_address: 192.0.2.1
+        - name: CORE-V6
+          remote_as: 64520
+          address_family:
+            - afi: ipv6
+              safi: unicast
+      neighbors:
+        - neighbor_address: 192.0.2.1
+          use:
+            neighbor_group: CORE-V4
+        - neighbor_address: 2001:db8::2
+          use:
+            neighbor_group: CORE-V6
       neighbor_address_families:
         neighbors:
           - neighbor_address: 192.0.2.1
@@ -50,6 +61,33 @@
         that:
           - iosxr_bgp_global_config is undefined
           - iosxr_bgp_router_id_interfaces is undefined
+          - iosxr_bgp_model.address_families | map(attribute='afi') | list == ['ipv4', 'ipv6']
+          - iosxr_bgp_neighbor_groups | map(attribute='name') | list == ['CORE-V4', 'CORE-V6']
+          - iosxr_bgp_neighbors | map(attribute='neighbor_address') | list == ['192.0.2.1', '2001:db8::2']
+          - iosxr_bgp_model.neighbor_address_families.neighbors | length == 1
+
+    - name: Provide the legacy collection-oriented BGP fields
+      ansible.builtin.set_fact:
+        protocol_test_bgp:
+          as_number: 64520
+          peer_groups:
+            - name: LEGACY-CORE
+              remote_as: 64520
+          global:
+            neighbors:
+              - neighbor_address: 192.0.2.3
+                use:
+                  neighbor_group: LEGACY-CORE
+
+    - name: Normalize legacy peer and neighbor fields
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Verify legacy aliases remain supported
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_neighbor_groups | map(attribute='name') | list == ['LEGACY-CORE']
+          - iosxr_bgp_neighbors | map(attribute='neighbor_address') | list == ['192.0.2.3']
 
     - name: Explicitly disable protocols
       ansible.builtin.set_fact:
@@ -83,3 +121,53 @@
         that:
           - iosxr_bgp_global_config == {}
           - iosxr_bgp_router_id_interfaces == []
+
+    - name: Prepare BGP global settings for a route reflector
+      ansible.builtin.set_fact:
+        protocol_test_bgp:
+          enabled: true
+          as_number: 64521
+          cluster_id: 1.1.1.1
+        iosxr_bgp_global_config:
+          bgp:
+            router_id: 198.19.2.11
+
+    - name: Apply route-reflector cluster ID to module configuration
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/cluster_id.yaml
+
+    - name: Verify cluster ID merges with existing BGP global settings
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config.bgp.cluster_id == '1.1.1.1'
+          - iosxr_bgp_global_config.bgp.router_id == '198.19.2.11'
+
+- name: Verify redundant route-reflector model without device access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load isolated route-reflector model
+      ansible.builtin.include_vars:
+        file: ../examples/bgp-route-reflector.yaml
+        name: bgp_rr_example
+
+    - name: Select route-reflector model
+      ansible.builtin.set_fact:
+        iosxr_bgp_model: "{{ bgp_rr_example.iosxr.devices['rr-01'].configuration.bgp }}"
+        iosxr_bgp_global_config:
+          bgp:
+            router_id: 198.19.2.11
+
+    - name: Map route-reflector cluster ID into global BGP configuration
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/cluster_id.yaml
+
+    - name: Verify cluster, AFs, RR-client settings, and non-client RR peer
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config.bgp.cluster_id == '1.1.1.1'
+          - iosxr_bgp_global_config.bgp.router_id == '198.19.2.11'
+          - iosxr_bgp_model.address_families | map(attribute='afi') | list == ['ipv4', 'vpnv4']
+          - iosxr_bgp_model.neighbor_groups[0].address_family[0].route_reflector_client.set
+          - iosxr_bgp_model.neighbor_groups[0].address_family[0].next_hop_self.set
+          - iosxr_bgp_model.neighbors[0].neighbor_address == '198.19.2.12'
+          - iosxr_bgp_model.neighbor_address_families.neighbors[0].address_family | length == 2
