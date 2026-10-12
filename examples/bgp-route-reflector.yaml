@@ -17,7 +17,7 @@ iosxr:
             - name: RR_CLIENTS
               remote_as: 64521
               update_source: Loopback0
-              address_family:
+              address_families:
                 - afi: ipv4
                   safi: unicast
                   route_reflector_client:

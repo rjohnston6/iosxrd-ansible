@@ -383,8 +383,11 @@ SID/service programming, or operational reachability is claimed.
 `iosxr_bgp` composes the installed IOS-XR BGP global, address-family,
 neighbor-address-family, and templates modules. Its process-level
 `address_families` list explicitly activates AFs under `router bgp` before
-peer configuration; AFs under a neighbor group separately configure that
-group's per-neighbor policy. The `ix-pop` host model uses
+peer configuration. Neighbor-group model entries use plural
+`address_families`; the role converts them to the collection's singular
+`address_family` input. AFs under a neighbor group separately configure that
+group's per-neighbor policy, while `neighbor_address_families` configures
+individual peers. The `ix-pop` host model uses
 local AS 64520 and one eBGP peer in AS 64521 over IPv4 `198.19.1.1` and IPv6
 `2001:db8:5555:2000::2`, with IPv4/IPv6 unicast in the default VRF. It sets
 the explicit `EBGP-ACCEPT-ALL` route policy in both directions for each AF.

@@ -303,7 +303,7 @@ end-to-end repair; platform and operational validation remain required.
 | `router_id_interface` | Defaults to Loopback0; first modeled IPv4 address supplies router ID |
 | `route_policies` | Mapping of policy name to `{statements: multiline RPL}` |
 | `address_families` | Collection AF list with `afi`, `safi`, and optional `vrf` |
-| `neighbor_groups` | Neighbor-group list with `name`, remote AS, update source, and AF policy settings |
+| `neighbor_groups` | Neighbor-group list with `name`, remote AS, update source, and `address_families` policy settings |
 | `neighbors` | Global neighbor list with `neighbor_address`, optional `use.neighbor_group`, and peer settings |
 | `global` | Additional BGP-global module data, including VRF settings |
 | `neighbor_address_families` | Neighbor-AF module data, including per-VRF neighbor AFs |
@@ -312,15 +312,19 @@ end-to-end repair; platform and operational validation remain required.
 module input. They serve different purposes. The BGP role wraps module data
 with `as_number` and applies resource modules in merged state. It maps
 `neighbor_groups` to the collection's `neighbor` input and top-level `neighbors`
-to `global.neighbors`. Do not set both top-level `neighbors` and
-`global.neighbors`. The old `peer_groups` field remains a compatibility alias
-when `neighbor_groups` is absent.
+to `global.neighbors`. Within a model neighbor-group entry, use plural
+`address_families`; the role normalizes it to the collection's singular
+`address_family` key. The old singular group key and `peer_groups` field remain
+compatibility aliases when their preferred fields are absent. Do not set both
+top-level `neighbors` and `global.neighbors`.
 
 Process `address_families` activate families under `router bgp`. A neighbor
-group's `address_family` configures inherited group settings. The separate
+group's `address_families` configures inherited group settings. The separate
 `neighbor_address_families` field controls per-neighbor AF activation and
-policy, including per-VRF peers. These are distinct layers; process AF
-activation does not automatically activate an AF for every neighbor.
+policy, including per-VRF peers. The collection module takes singular
+`address_family` for each group, so the role translates the plural model field
+before calling it. These are distinct layers; process AF activation does not
+automatically activate an AF for every neighbor.
 
 Example with separate IPv4 and IPv6 groups and peers:
 
@@ -336,12 +340,12 @@ bgp:
   neighbor_groups:
     - name: CORE_V4
       remote_as: 64520
-      address_family:
+      address_families:
         - afi: ipv4
           safi: unicast
     - name: CORE_V6
       remote_as: 64520
-      address_family:
+      address_families:
         - afi: ipv6
           safi: unicast
   neighbors:
@@ -364,7 +368,7 @@ bgp:
 ```
 
 The AF lists under process, neighbor groups, and neighbor activation are
-separate and intentional. Group `address_family` sets neighbor-group policy;
+separate and intentional. Group `address_families` sets neighbor-group policy;
 `neighbor_address_families` activates/policies each peer. Since these are lists,
 the nearest scope's list replaces the inherited list. Keep each complete AF or
 neighbor list together at the scope that owns it.

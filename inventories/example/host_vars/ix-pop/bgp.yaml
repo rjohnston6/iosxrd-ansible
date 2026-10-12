@@ -15,7 +15,7 @@ iosxr:
           neighbor_groups:
             - name: EBGP-AS64521
               remote_as: 64521
-              address_family:
+              address_families:
                 - afi: ipv4
                   safi: unicast
                   route_policy:
