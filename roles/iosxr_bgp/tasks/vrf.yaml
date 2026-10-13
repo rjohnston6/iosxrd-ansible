@@ -20,6 +20,13 @@
     loop_var: iosxr_bgp_vrf_address_family
     label: "{{ iosxr_bgp_vrf_name }} {{ iosxr_bgp_vrf_address_family.afi }}"
 
+- name: Configure custom BGP VRF route distinguisher and SRv6 service AFs
+  cisco.iosxr.iosxr_config:
+    content: "{{ lookup('ansible.builtin.template', 'vrf_service.j2') }}"
+  when:
+    - iosxr_bgp_vrf.value.bgp.rd is defined or
+      iosxr_bgp_vrf.value.bgp.address_families | default([]) | selectattr('srv6', 'defined') | list | length > 0
+
 - name: Activate BGP address families under VRF
   cisco.iosxr.iosxr_config:
     parents:
@@ -39,10 +46,3 @@
       address_family: "{{ iosxr_bgp_vrf_address_families }}"
     state: merged
   when: iosxr_bgp_vrf_address_families | length > 0
-
-- name: Configure custom BGP VRF route distinguisher and SRv6 service AFs
-  cisco.iosxr.iosxr_config:
-    content: "{{ lookup('ansible.builtin.template', 'vrf_service.j2') }}"
-  when:
-    - iosxr_bgp_vrf.value.bgp.rd is defined or
-      iosxr_bgp_vrf.value.bgp.address_families | default([]) | selectattr('srv6', 'defined') | list | length > 0
