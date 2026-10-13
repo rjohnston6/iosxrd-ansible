@@ -1,0 +1,34 @@
+---
+- name: Validate VRF fields
+  ansible.builtin.assert:
+    that:
+      - iosxr_vrf_definition.value is mapping
+      - iosxr_vrf_definition.value.name | default(iosxr_vrf_definition.key) is string
+      - iosxr_vrf_definition.value.name | default(iosxr_vrf_definition.key) | length > 0
+      - iosxr_vrf_definition.value.interfaces | default([]) is sequence
+      - iosxr_vrf_definition.value.interfaces | default([]) is not string
+      - iosxr_vrf_definition.value.address_families | default([]) is sequence
+      - iosxr_vrf_definition.value.address_families | default([]) is not string
+      - iosxr_vrf_definition.value.bgp | default({}) is mapping
+      - iosxr_vrf_definition.value.bgp.address_families | default([]) is sequence
+      - iosxr_vrf_definition.value.bgp.address_families | default([]) is not string
+      - >-
+        (iosxr_vrf_definition.value.bgp.address_families | default([]) | length == 0)
+        or iosxr_effective_model.iosxr.devices.configuration.bgp.enabled | default(false) | bool
+      - >-
+        (iosxr_vrf_definition.value.bgp.address_families | default([]) | length == 0)
+        or iosxr_effective_model.iosxr.devices.configuration.bgp.as_number is defined
+      - >-
+        (iosxr_vrf_definition.value.bgp.address_families | default([]) | length == 0)
+        or iosxr_vrf_definition.value.bgp.rd is defined
+    fail_msg: >-
+      VRF {{ iosxr_vrf_definition.key }} must contain valid interface and address-family lists;
+      BGP VRF AFs require enabled BGP, an AS number, and a route distinguisher.
+
+- name: Validate BGP VRF SRv6 references
+  ansible.builtin.include_tasks: validate_srv6.yaml
+  loop: "{{ iosxr_vrf_definition.value.bgp.address_families | default([]) }}"
+  loop_control:
+    loop_var: iosxr_vrf_address_family
+    label: "{{ iosxr_vrf_definition.key }} {{ iosxr_vrf_address_family.afi }}"
+  when: iosxr_vrf_address_family.srv6 is defined

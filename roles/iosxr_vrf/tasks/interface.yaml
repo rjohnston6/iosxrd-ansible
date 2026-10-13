@@ -1,0 +1,7 @@
+---
+- name: Configure interface VRF assignment
+  cisco.iosxr.iosxr_vrf_interfaces:
+    config:
+      - name: "{{ iosxr_vrf_interface }}"
+        vrf_name: "{{ iosxr_vrf_name }}"
+    state: merged

@@ -1,0 +1,12 @@
+---
+- name: Configure BGP settings for modeled VRFs
+  ansible.builtin.include_tasks: vrf.yaml
+  loop: >-
+    {{ iosxr_effective_model.iosxr.devices.configuration.vrfs | default({})
+       | dict2items | selectattr('value.bgp', 'defined') | list }}
+  loop_control:
+    loop_var: iosxr_bgp_vrf
+    label: "{{ iosxr_bgp_vrf.key }}"
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined

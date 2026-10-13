@@ -186,6 +186,9 @@
     - iosxr_bgp_model.as_number is defined
     - iosxr_bgp_model.address_families | default([]) | length > 0
 
+- name: Configure BGP VRF address families and SRv6 services
+  ansible.builtin.include_tasks: vrfs.yaml
+
 - name: Configure IOS-XR BGP neighbor address families
   cisco.iosxr.iosxr_bgp_neighbor_address_family:
     config: "{{ {'as_number': iosxr_bgp_model.as_number} | combine(iosxr_bgp_model.neighbor_address_families | default({}), recursive=True) }}"

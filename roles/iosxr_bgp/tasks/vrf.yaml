@@ -1,0 +1,48 @@
+---
+- name: Resolve configured BGP VRF name
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_name: "{{ iosxr_bgp_vrf.value.name | default(iosxr_bgp_vrf.key) }}"
+
+- name: Initialize normalized BGP VRF address families
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_address_families: []
+
+- name: Normalize BGP VRF address families for IOS-XR collection
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_address_families: >-
+      {{ iosxr_bgp_vrf_address_families + [
+           (iosxr_bgp_vrf_address_family | dict2items
+            | rejectattr('key', 'equalto', 'srv6') | items2dict)
+           | combine({'vrf': iosxr_bgp_vrf_name})
+         ] }}
+  loop: "{{ iosxr_bgp_vrf.value.bgp.address_families | default([]) }}"
+  loop_control:
+    loop_var: iosxr_bgp_vrf_address_family
+    label: "{{ iosxr_bgp_vrf_name }} {{ iosxr_bgp_vrf_address_family.afi }}"
+
+- name: Activate BGP address families under VRF
+  cisco.iosxr.iosxr_config:
+    parents:
+      - "router bgp {{ iosxr_bgp_model.as_number }}"
+      - "vrf {{ iosxr_bgp_vrf_name }}"
+    lines:
+      - "address-family {{ iosxr_bgp_vrf_address_family.afi }} {{ iosxr_bgp_vrf_address_family.safi | default('unicast') }}"
+  loop: "{{ iosxr_bgp_vrf.value.bgp.address_families | default([]) }}"
+  loop_control:
+    loop_var: iosxr_bgp_vrf_address_family
+    label: "{{ iosxr_bgp_vrf_name }} {{ iosxr_bgp_vrf_address_family.afi }}"
+
+- name: Configure BGP address families for VRF
+  cisco.iosxr.iosxr_bgp_address_family:
+    config:
+      as_number: "{{ iosxr_bgp_model.as_number }}"
+      address_family: "{{ iosxr_bgp_vrf_address_families }}"
+    state: merged
+  when: iosxr_bgp_vrf_address_families | length > 0
+
+- name: Configure custom BGP VRF route distinguisher and SRv6 service AFs
+  cisco.iosxr.iosxr_config:
+    content: "{{ lookup('ansible.builtin.template', 'vrf_service.j2') }}"
+  when:
+    - iosxr_bgp_vrf.value.bgp.rd is defined or
+      iosxr_bgp_vrf.value.bgp.address_families | default([]) | selectattr('srv6', 'defined') | list | length > 0

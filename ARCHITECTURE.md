@@ -122,6 +122,11 @@ live protocol application and operational state still require topology testing.
 - `iosxr_l3_interfaces` configures interface metadata and L3 addresses. It uses
   `cisco.iosxr.iosxr_interfaces` for descriptions, enabled state, and Ethernet
   MTU, and `cisco.iosxr.iosxr_l3_interfaces` for IPv4/IPv6 addresses.
+- `iosxr_vrf` creates VRFs, configures import/export route targets, and assigns
+  interfaces using `iosxr_vrf_global`, `iosxr_vrf_address_family`, and
+  `iosxr_vrf_interfaces`. It runs after SRv6 locator setup and before L3
+  address configuration so addresses are applied after the interface has
+  entered its VRF.
 - `iosxr_ntp` uses `cisco.iosxr.iosxr_ntp_global`. It skips NTP on XRd because
   the CML XRd image rejects the NTP CLI used by the resource module.
 - `iosxr_srv6` renders named locator prefixes using `iosxr_config`, gated by
@@ -133,8 +138,9 @@ live protocol application and operational state still require topology testing.
   through one hierarchical template, including interface AF subcommands.
 - `iosxr_bgp` combines the collection's BGP global, address-family,
   neighbor-address-family, and templates modules with `iosxr_config` where
-  required by the installed collection's behavior. All tasks require
-  `bgp.enabled: true`.
+  required by the installed collection's behavior. VRF AFs use the BGP AF module;
+  custom VRF RDs and per-VRF SRv6 AF commands use an isolated CLI template.
+  All tasks require `bgp.enabled: true`.
 
 Prefer a collection resource module for a feature when it accurately handles
 that feature. Use generic CLI configuration narrowly when no resource module

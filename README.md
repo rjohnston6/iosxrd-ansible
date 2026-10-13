@@ -256,6 +256,22 @@ l3_interfaces:
       - address: 2001:db8:5555::1/128
 ```
 
+### Customer VRFs and L3VPN services
+
+`configuration.vrfs` is a map keyed by stable VRF identifiers. Each entry can
+set a router-facing `name` from customer variables, then define IPv4/IPv6
+route-target AFs, interfaces to bind, and optional BGP service settings. The
+`iosxr_vrf` role uses the IOS-XR VRF-global, VRF-AF, and VRF-interface resource
+modules. BGP VRF AFs use `iosxr_bgp_address_family`; custom BGP VRF RDs and
+per-VRF SRv6 AF settings use narrow `iosxr_config` fallbacks because the
+installed resource modules do not expose those fields.
+
+See [examples/vrf-service-model.yaml](examples/vrf-service-model.yaml) for an
+isolated customer L3VPN with interface assignment, import/export route targets,
+BGP RD, and an SRv6 locator. It is not loaded by IX-POP inventory. The rendered
+resource-module and fallback CLI checks run offline with `make model-test`; no
+VRF or SRv6 service has been applied to IX-POP.
+
 ### Stage 1 validation
 
 The interface roles were applied to the IOS XRd 26.1.1 test device `ix-pop`.

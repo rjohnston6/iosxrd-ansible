@@ -1,0 +1,44 @@
+---
+iosxr:
+  devices:
+    srv6-pe-11:
+      configuration:
+        bgp:
+          enabled: true
+          as_number: "{{ global_as }}"
+          address_families:
+            - afi: vpnv4
+              safi: unicast
+        srv6:
+          enabled: true
+          locators:
+            MAIN_LOCATOR:
+              prefix: 2001:db8:1f00:11::/64
+        vrfs:
+          customer_a:
+            name: "{{ customer.name }}"
+            description: "{{ customer.name }} IPv4 L3VPN"
+            interfaces:
+              - GigabitEthernet0/0/0/0.101
+            address_families:
+              - afi: ipv4
+                safi: unicast
+                import_config:
+                  route_target: "{{ global_as }}:{{ customer.id }}"
+                export:
+                  route_target: "{{ global_as }}:{{ customer.id }}"
+            bgp:
+              rd: "{{ loopback_ipv4 }}:{{ customer.id }}"
+              address_families:
+                - afi: ipv4
+                  safi: unicast
+                  additional_paths: send
+                  srv6:
+                    locator: MAIN_LOCATOR
+                    allocation_mode: per-vrf
+
+global_as: 64521
+customer:
+  name: CUSTOMER_A
+  id: 101
+loopback_ipv4: 198.19.2.11

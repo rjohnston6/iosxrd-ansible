@@ -149,6 +149,56 @@ Groups merge in list order, then explicit interface settings win. Membership
 is stripped before module input. This facility covers metadata only, not L3
 addresses or IS-IS/BGP interface configuration. Unknown group references fail.
 
+## Customer VRFs And L3VPN Services
+
+VRFs use a name-keyed mapping at `configuration.vrfs`. Each VRF can define an
+optional router-facing `name` (defaulting to its map key), interfaces to bind,
+route targets per AF, and optional BGP service settings. This lets a stable
+model key coexist with a name templated from customer data:
+
+```yaml
+vrfs:
+  customer_a:
+    name: "{{ customer.name }}"
+    description: "{{ customer.name }} IPv4 L3VPN"
+    interfaces:
+      - GigabitEthernet0/0/0/0.101
+    address_families:
+      - afi: ipv4
+        safi: unicast
+        import_config:
+          route_target: 64521:101
+        export:
+          route_target: 64521:101
+    bgp:
+      rd: 198.19.2.11:101
+      address_families:
+        - afi: ipv4
+          safi: unicast
+          srv6:
+            locator: MAIN_LOCATOR
+            allocation_mode: per-vrf
+```
+
+`iosxr_vrf` uses `iosxr_vrf_global`, `iosxr_vrf_address_family`, and
+`iosxr_vrf_interfaces` for VRF metadata, route-target import/export, and
+interface assignment. The `interfaces` list contains IOS-XR interface names;
+IP addressing remains in `l3_interfaces`. VRF and BGP AF/list collections
+replace inherited lists, consistent with the general model merge rules.
+
+The nested `bgp` section is applied only when root `configuration.bgp.enabled`
+is true. Per-VRF AF activation uses `iosxr_bgp_address_family`, with the VRF
+name attached. The installed module only exposes automatic RD in its BGP VRF
+schema, so a custom `bgp.rd` uses a narrow `iosxr_config` command. It also uses
+`iosxr_config` for BGP-VRF SRv6 `segment-routing srv6`, locator, and allocation
+mode because those fields are not in the resource-module schema. Per-VRF SRv6
+requires global SRv6 enabled, a defined locator, and `allocation_mode: per-vrf`.
+
+The standalone [customer VRF service example](examples/vrf-service-model.yaml)
+is not loaded into IX-POP inventory. `tests/vrfs.yaml` renders the collection
+resource modules and checks the CLI fallback offline; no VRF or SRv6 customer
+service has been applied to IX-POP.
+
 ## NTP
 
 ```yaml

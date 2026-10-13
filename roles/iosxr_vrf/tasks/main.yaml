@@ -1,0 +1,25 @@
+---
+- name: Initialize modeled VRF definitions
+  ansible.builtin.set_fact:
+    iosxr_vrf_definitions: "{{ iosxr_effective_model.iosxr.devices.configuration.vrfs | default({}) }}"
+
+- name: Validate VRF model mapping
+  ansible.builtin.assert:
+    that:
+      - iosxr_vrf_definitions is mapping
+    fail_msg: VRFs must be a mapping keyed by VRF name.
+
+- name: Validate all modeled VRFs before configuring devices
+  ansible.builtin.include_tasks: validate.yaml
+  loop: "{{ iosxr_vrf_definitions | dict2items }}"
+  loop_control:
+    loop_var: iosxr_vrf_definition
+    label: "{{ iosxr_vrf_definition.key }}"
+
+
+- name: Configure modeled VRFs
+  ansible.builtin.include_tasks: configure.yaml
+  loop: "{{ iosxr_vrf_definitions | dict2items }}"
+  loop_control:
+    loop_var: iosxr_vrf_definition
+    label: "{{ iosxr_vrf_definition.key }}"
