@@ -299,7 +299,7 @@ end-to-end repair; platform and operational validation remain required.
 | --- | --- |
 | `enabled` | Required true to run any BGP task |
 | `as_number` | Local AS required for process, AF, and peer configuration |
-| `cluster_id` | Optional route-reflector cluster ID; mapped to global `bgp.cluster_id` |
+| `cluster_id` | Optional route-reflector cluster ID, configured under the local BGP process |
 | `router_id_interface` | Defaults to Loopback0; first modeled IPv4 address supplies router ID |
 | `route_policies` | Mapping of policy name to `{statements: multiline RPL}` |
 | `address_families` | Collection AF list with `afi`, `safi`, and optional `vrf` |
@@ -379,8 +379,10 @@ device scope. Put clients in a neighbor group with
 setting. Model the other RR as a direct neighbor without the client flag, then
 activate its desired AFs under `neighbor_address_families`. See the standalone
 [route-reflector example](examples/bgp-route-reflector.yaml). The role maps
-`cluster_id` to the collection's global BGP `bgp.cluster_id` field, emitting
-IOS-XR's `bgp cluster-id` command.
+`cluster_id` to IOS-XR's `bgp cluster-id` command using `iosxr_config`. This
+avoids a collection parser limitation that fails to recognize dotted IPv4
+cluster IDs in the running configuration and otherwise reports a change every
+run. The task matches the command under the local `router bgp` process.
 
 The checked-in `ix-pop` BGP fragment and README show the complete peer-group,
 neighbor, IPv4/IPv6 AF, VRF, and SRv6 encapsulation shapes. Use the installed

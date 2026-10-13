@@ -129,25 +129,6 @@
           - iosxr_bgp_global_config == {}
           - iosxr_bgp_router_id_interfaces == []
 
-    - name: Prepare BGP global settings for a route reflector
-      ansible.builtin.set_fact:
-        protocol_test_bgp:
-          enabled: true
-          as_number: 64521
-          cluster_id: 1.1.1.1
-        iosxr_bgp_global_config:
-          bgp:
-            router_id: 198.19.2.11
-
-    - name: Apply route-reflector cluster ID to module configuration
-      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/cluster_id.yaml
-
-    - name: Verify cluster ID merges with existing BGP global settings
-      ansible.builtin.assert:
-        that:
-          - iosxr_bgp_global_config.bgp.cluster_id == '1.1.1.1'
-          - iosxr_bgp_global_config.bgp.router_id == '198.19.2.11'
-
 - name: Verify redundant route-reflector model without device access
   hosts: localhost
   connection: local
@@ -161,18 +142,11 @@
     - name: Select route-reflector model
       ansible.builtin.set_fact:
         iosxr_bgp_model: "{{ bgp_rr_example.iosxr.devices['rr-01'].configuration.bgp }}"
-        iosxr_bgp_global_config:
-          bgp:
-            router_id: 198.19.2.11
-
-    - name: Map route-reflector cluster ID into global BGP configuration
-      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/cluster_id.yaml
 
     - name: Verify cluster, AFs, RR-client settings, and non-client RR peer
       ansible.builtin.assert:
         that:
-          - iosxr_bgp_global_config.bgp.cluster_id == '1.1.1.1'
-          - iosxr_bgp_global_config.bgp.router_id == '198.19.2.11'
+          - iosxr_bgp_model.cluster_id == '1.1.1.1'
           - iosxr_bgp_model.address_families | map(attribute='afi') | list == ['ipv4', 'vpnv4']
           - iosxr_bgp_model.neighbor_groups[0].address_families[0].route_reflector_client.set
           - iosxr_bgp_model.neighbor_groups[0].address_families[0].next_hop_self.set
