@@ -299,16 +299,90 @@ end-to-end repair; platform and operational validation remain required.
 | --- | --- |
 | `enabled` | Required true to run any BGP task |
 | `as_number` | Local AS required for process, AF, and peer configuration |
+| `cluster_id` | Optional route-reflector cluster ID, configured under the local BGP process |
 | `router_id_interface` | Defaults to Loopback0; first modeled IPv4 address supplies router ID |
 | `route_policies` | Mapping of policy name to `{statements: multiline RPL}` |
 | `address_families` | Collection AF list with `afi`, `safi`, and optional `vrf` |
-| `peer_groups` | Templates-module neighbor list with `name`, remote AS, update source, and AF policy settings |
-| `global` | BGP-global module data, including global/VRF neighbors |
+| `neighbor_groups` | Neighbor-group list with `name`, remote AS, update source, and `address_families` policy settings |
+| `neighbors` | Global neighbor list with `neighbor_address`, optional `use.neighbor_group`, and peer settings |
+| `global` | Additional BGP-global module data, including VRF settings |
 | `neighbor_address_families` | Neighbor-AF module data, including per-VRF neighbor AFs |
 
 `iosxr.global.configuration` is a model scope; `configuration.bgp.global` is
 module input. They serve different purposes. The BGP role wraps module data
-with `as_number` and applies resource modules in merged state.
+with `as_number` and applies resource modules in merged state. It maps
+`neighbor_groups` to the collection's `neighbor` input and top-level `neighbors`
+to `global.neighbors`. Within a model neighbor-group entry, use plural
+`address_families`; the role normalizes it to the collection's singular
+`address_family` key. The old singular group key and `peer_groups` field remain
+compatibility aliases when their preferred fields are absent. Do not set both
+top-level `neighbors` and `global.neighbors`.
+
+Process `address_families` activate families under `router bgp`. A neighbor
+group's `address_families` configures inherited group settings. The separate
+`neighbor_address_families` field controls per-neighbor AF activation and
+policy, including per-VRF peers. The collection module takes singular
+`address_family` for each group, so the role translates the plural model field
+before calling it. These are distinct layers; process AF activation does not
+automatically activate an AF for every neighbor.
+
+Example with separate IPv4 and IPv6 groups and peers:
+
+```yaml
+bgp:
+  enabled: true
+  as_number: 64520
+  address_families:
+    - afi: ipv4
+      safi: unicast
+    - afi: ipv6
+      safi: unicast
+  neighbor_groups:
+    - name: CORE_V4
+      remote_as: 64520
+      address_families:
+        - afi: ipv4
+          safi: unicast
+    - name: CORE_V6
+      remote_as: 64520
+      address_families:
+        - afi: ipv6
+          safi: unicast
+  neighbors:
+    - neighbor_address: 192.0.2.2
+      use:
+        neighbor_group: CORE_V4
+    - neighbor_address: 2001:db8::2
+      use:
+        neighbor_group: CORE_V6
+  neighbor_address_families:
+    neighbors:
+      - neighbor_address: 192.0.2.2
+        address_family:
+          - afi: ipv4
+            safi: unicast
+      - neighbor_address: 2001:db8::2
+        address_family:
+          - afi: ipv6
+            safi: unicast
+```
+
+The AF lists under process, neighbor groups, and neighbor activation are
+separate and intentional. Group `address_families` sets neighbor-group policy;
+`neighbor_address_families` activates/policies each peer. Since these are lists,
+the nearest scope's list replaces the inherited list. Keep each complete AF or
+neighbor list together at the scope that owns it.
+
+For redundant route reflectors, define each router's unique `cluster_id` at its
+device scope. Put clients in a neighbor group with
+`route_reflector_client: {set: true}` and any group-level `next_hop_self`
+setting. Model the other RR as a direct neighbor without the client flag, then
+activate its desired AFs under `neighbor_address_families`. See the standalone
+[route-reflector example](examples/bgp-route-reflector.yaml). The role maps
+`cluster_id` to IOS-XR's `bgp cluster-id` command using `iosxr_config`. This
+avoids a collection parser limitation that fails to recognize dotted IPv4
+cluster IDs in the running configuration and otherwise reports a change every
+run. The task matches the command under the local `router bgp` process.
 
 The checked-in `ix-pop` BGP fragment and README show the complete peer-group,
 neighbor, IPv4/IPv6 AF, VRF, and SRv6 encapsulation shapes. Use the installed

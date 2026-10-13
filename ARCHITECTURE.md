@@ -203,7 +203,11 @@ BGP lives under each scope's `configuration.bgp`, resolved to
 
 - Local AS, a router-ID source interface, and process-level global AF
   activation.
-- Named peer groups with remote AS, IPv4/IPv6 AF settings, and route policies.
+- Named `neighbor_groups` with remote AS, per-group AF settings, and route policies.
+- Global neighbors in a top-level `neighbors` list, referencing groups by name.
+- Process AF activation, group AF settings, and per-neighbor AF activation as
+  separate configuration layers. Lists replace across scopes rather than merge
+  by identifier.
 - Global and per-VRF AF configuration through the corresponding collection
   modules.
 - Individual global or VRF neighbors inheriting a peer group.
@@ -214,8 +218,13 @@ BGP lives under each scope's `configuration.bgp`, resolved to
   defaulting to `Loopback0`. If no modeled IPv4 address is found, the role warns
   and omits the router ID.
 
+The model uses `neighbor_groups` and top-level `neighbors`; the role translates
+them to the collection's `neighbor` and `global.neighbors` inputs. The previous
+`peer_groups` and `global.neighbors` model form remains compatible when the
+preferred field is absent. Do not define both forms simultaneously.
+
 The CML example defines `EBGP-ACCEPT-ALL` globally and attaches it inbound and
-outbound to both AFs in peer group `EBGP-AS64521`. Its body is `pass`; this is
+outbound to both AFs in neighbor group `EBGP-AS64521`. Its body is `pass`; this is
 intentionally limited to the isolated lab and must not be treated as a
 production filtering policy. Production peers should use explicit prefix,
 community, and other route-attribute filters appropriate to the service.
@@ -228,7 +237,7 @@ sets are modeled and deployed.
 
 The installed BGP templates module accepts an SRv6 encapsulation option but
 does not merge/render it. The role therefore uses a narrow `iosxr_config`
-fallback for explicitly requested peer-group AF encapsulation. SRv6 locator
+fallback for explicitly requested neighbor-group AF encapsulation. SRv6 locator
 and service configuration are outside the current BGP role and require separate
 modeling and device validation.
 

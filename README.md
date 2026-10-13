@@ -383,18 +383,32 @@ SID/service programming, or operational reachability is claimed.
 `iosxr_bgp` composes the installed IOS-XR BGP global, address-family,
 neighbor-address-family, and templates modules. Its process-level
 `address_families` list explicitly activates AFs under `router bgp` before
-peer configuration; AFs under a peer group separately configure that group's
-per-neighbor policy. The `ix-pop` host model uses
+peer configuration. Neighbor-group model entries use plural
+`address_families`; the role converts them to the collection's singular
+`address_family` input. AFs under a neighbor group separately configure that
+group's per-neighbor policy, while `neighbor_address_families` configures
+individual peers. The `ix-pop` host model uses
 local AS 64520 and one eBGP peer in AS 64521 over IPv4 `198.19.1.1` and IPv6
 `2001:db8:5555:2000::2`, with IPv4/IPv6 unicast in the default VRF. It sets
 the explicit `EBGP-ACCEPT-ALL` route policy in both directions for each AF.
 That policy contains `pass`, so it permits every route; it is intentionally
 limited to this isolated CML test device and is not an appropriate production
 policy without deliberate route filtering. Both sessions inherit the remote AS
-and address-family policies from the `EBGP-AS64521` neighbor group. The role
-derives the BGP router ID from the configured IPv4 address on the modeled
+and address-family policies from the `EBGP-AS64521` neighbor group. Model input
+uses `neighbor_groups` and a top-level `neighbors` list; the role maps these to
+the collection's `neighbor` and `global.neighbors` inputs. Legacy `peer_groups`
+and `global.neighbors` remain accepted when the preferred fields are absent; do
+not define both forms together. The role derives the BGP router ID from the
+configured IPv4 address on the modeled
 `router_id_interface` (default `Loopback0`); if that interface or its IPv4
 address is not modeled, it warns and omits the router ID.
+
+For redundant route reflectors, set a unique `cluster_id` per router. Put
+client behavior such as `route_reflector_client.set` and `next_hop_self.set`
+under a neighbor group's address family. Model RR-to-RR peering as a direct
+neighbor without the client flag and configure its AFs separately. The
+[standalone route-reflector example](examples/bgp-route-reflector.yaml) shows
+IPv4/VPNv4 AFs and this separation. The IX-POP example remains unchanged.
 
 Route policies are mappings keyed by policy name, so recursive scope merging
 preserves policies declared at broader scopes and lets a host add or override
@@ -471,10 +485,10 @@ neighbor_address_families:
               safi: unicast
 ```
 
-Peer-group address families can opt into SRv6 encapsulation:
+Neighbor-group address families can opt into SRv6 encapsulation:
 
 ```yaml
-peer_groups:
+neighbor_groups:
   - name: SRV6-CORE
     address_family:
       - afi: ipv4

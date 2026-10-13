@@ -1,4 +1,47 @@
 ---
+- name: Validate BGP neighbor model aliases
+  ansible.builtin.assert:
+    that:
+      - not (iosxr_bgp_model.neighbor_groups is defined and iosxr_bgp_model.peer_groups is defined)
+      - not (iosxr_bgp_model.neighbors is defined and (iosxr_bgp_model.global | default({})).neighbors is defined)
+    fail_msg: Use neighbor_groups instead of peer_groups, and define neighbors at one model location only.
+
+- name: Normalize BGP neighbor model fields
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_group_source: "{{ iosxr_bgp_model.neighbor_groups | default(iosxr_bgp_model.peer_groups | default([])) }}"
+    iosxr_bgp_neighbors: >-
+      {{ iosxr_bgp_model.neighbors | default((iosxr_bgp_model.global | default({})).neighbors | default([])) }}
+
+- name: Validate neighbor-group address-family aliases
+  ansible.builtin.assert:
+    that:
+      - iosxr_bgp_neighbor_group is mapping
+      - not (iosxr_bgp_neighbor_group.address_families is defined and iosxr_bgp_neighbor_group.address_family is defined)
+    fail_msg: "Neighbor group {{ iosxr_bgp_neighbor_group.name | default('unknown') }} must use only address_families."
+  loop: "{{ iosxr_bgp_neighbor_group_source }}"
+  loop_control:
+    loop_var: iosxr_bgp_neighbor_group
+    label: "{{ iosxr_bgp_neighbor_group.name | default('unknown') }}"
+
+- name: Initialize normalized BGP neighbor groups
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_groups: []
+
+- name: Normalize neighbor-group address families for IOS-XR collection
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_groups: >-
+      {{ iosxr_bgp_neighbor_groups + [
+           (iosxr_bgp_neighbor_group | dict2items
+            | rejectattr('key', 'equalto', 'address_families') | items2dict)
+           | combine(
+               {'address_family': iosxr_bgp_neighbor_group.address_families}
+               if iosxr_bgp_neighbor_group.address_families is defined else {})
+         ] }}
+  loop: "{{ iosxr_bgp_neighbor_group_source }}"
+  loop_control:
+    loop_var: iosxr_bgp_neighbor_group
+    label: "{{ iosxr_bgp_neighbor_group.name | default('unknown') }}"
+
 - name: Find modeled BGP router ID interface
   ansible.builtin.set_fact:
     iosxr_bgp_router_id_interfaces: >-
@@ -44,7 +87,9 @@
 
 - name: Initialize IOS-XR BGP global configuration
   ansible.builtin.set_fact:
-    iosxr_bgp_global_config: "{{ iosxr_bgp_model.global | default({}) }}"
+    iosxr_bgp_global_config: >-
+      {{ (iosxr_bgp_model.global | default({}))
+         | combine({'neighbors': iosxr_bgp_neighbors} if iosxr_bgp_model.neighbors is defined else {}, recursive=True) }}
   when:
     - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
@@ -92,12 +137,12 @@
   cisco.iosxr.iosxr_bgp_templates:
     config:
       as_number: "{{ iosxr_bgp_model.as_number }}"
-      neighbor: "{{ iosxr_bgp_model.peer_groups }}"
+      neighbor: "{{ iosxr_bgp_neighbor_groups }}"
     state: merged
   when:
     - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
-    - iosxr_bgp_model.peer_groups | default([]) | length > 0
+    - iosxr_bgp_neighbor_groups | length > 0
 
 - name: Configure IOS-XR BGP SRv6 peer-group address families
   cisco.iosxr.iosxr_config:
@@ -107,7 +152,7 @@
       - "address-family {{ iosxr_bgp_peer_family.1.afi }} {{ iosxr_bgp_peer_family.1.safi }}"
     lines:
       - encapsulation-type srv6
-  loop: "{{ iosxr_bgp_model.peer_groups | default([]) | subelements('address_family', skip_missing=True) }}"
+  loop: "{{ iosxr_bgp_neighbor_groups | subelements('address_family', skip_missing=True) }}"
   loop_control:
     loop_var: iosxr_bgp_peer_family
     label: >-
@@ -125,7 +170,10 @@
   when:
     - iosxr_bgp_model.enabled | default(false) | bool
     - iosxr_bgp_model.as_number is defined
-    - iosxr_bgp_model.global | default({}) | length > 0
+    - iosxr_bgp_global_config | default({}) | length > 0
+
+- name: Configure the BGP route-reflector cluster ID
+  ansible.builtin.include_tasks: cluster_id.yaml
 
 - name: Configure IOS-XR BGP address families
   cisco.iosxr.iosxr_bgp_address_family:
