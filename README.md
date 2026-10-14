@@ -182,6 +182,10 @@ For field-level scope and feature documentation, see [DATA_MODEL.md](DATA_MODEL.
 For architecture decisions, validation status, and topology work, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+The field guide's [customer VRF and L3VPN section](DATA_MODEL.md#customer-vrfs-and-l3vpn-services)
+shows how global VPN AFs, VRF route targets, PE-CE interfaces, and per-VRF BGP
+neighbors fit together.
+
 The playbook includes `iosxr_system`, `iosxr_l3_interfaces`, `iosxr_ntp`,
 `iosxr_isis`, and `iosxr_bgp` roles. The system role applies the modeled
 hostname and banners; the device example includes login and MOTD banners.

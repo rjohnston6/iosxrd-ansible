@@ -140,7 +140,9 @@ live protocol application and operational state still require topology testing.
   neighbor-address-family, and templates modules with `iosxr_config` where
   required by the installed collection's behavior. VRF AFs use the BGP AF module;
   custom VRF RDs and per-VRF SRv6 AF commands use an isolated CLI template.
-  All tasks require `bgp.enabled: true`.
+  Per-VRF neighbor sessions and AF policies use the BGP global and neighbor-AF
+  modules, scoped to the router-facing VRF name. All tasks require
+  `bgp.enabled: true`.
 
 Prefer a collection resource module for a feature when it accurately handles
 that feature. Use generic CLI configuration narrowly when no resource module
@@ -290,6 +292,10 @@ hellos and no received hellos. `hello-padding disable` was manually committed on
 one interface and subsequently added to the model/renderer; no post-change
 adjacency or recovery result is recorded here. NTP remains unvalidated on XRd,
 and end-to-end SRv6/TI-LFA repair remains unverified.
+
+Customer VRF/L3VPN service models and their collection rendering have offline
+coverage only. No customer VRF, PE-CE eBGP session, VPN route exchange, or
+end-to-end route isolation has been verified on a live topology.
 
 ## Review And Merge Readiness
 

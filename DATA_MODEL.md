@@ -151,42 +151,61 @@ addresses or IS-IS/BGP interface configuration. Unknown group references fail.
 
 ## Customer VRFs And L3VPN Services
 
-VRFs use a name-keyed mapping at `configuration.vrfs`. Each VRF can define an
-optional router-facing `name` (defaulting to its map key), interfaces to bind,
-route targets per AF, and optional BGP service settings. This lets a stable
-model key coexist with a name templated from customer data:
+VRFs use a name-keyed mapping at `configuration.vrfs`. An IPv4 L3VPN service
+on a PE combines the global VPN AF, VRF route targets, interface assignment
+and addressing, and BGP AFs and peers under the VRF. This example shows those
+pieces together:
 
 ```yaml
-vrfs:
-  customer_a:
-    name: "{{ customer.name }}"
-    description: "{{ customer.name }} IPv4 L3VPN"
-    interfaces:
-      - GigabitEthernet0/0/0/0.101
-    address_families:
-      - afi: ipv4
-        safi: unicast
-        import_config:
-          route_target: 64521:101
-        export:
-          route_target: 64521:101
-    bgp:
-      rd: 198.19.2.11:101
-      address_families:
-        - afi: ipv4
-          safi: unicast
-          srv6:
-            locator: MAIN_LOCATOR
-            allocation_mode: per-vrf
-      neighbors:
-        - neighbor: 192.168.2.2
-          remote_as: 64530
+iosxr:
+  devices:
+    pe-01:
+      configuration:
+        bgp:
+          enabled: true
+          as_number: 64521
+          router_id_interface: Loopback0
           address_families:
-            - afi: ipv4
+            - afi: vpnv4
               safi: unicast
-              route_policy:
-                inbound: EBGP-ACCEPT-ALL
-                outbound: EBGP-ACCEPT-ALL
+          route_policies:
+            EBGP-CE-IN:
+              statements: pass
+            EBGP-CE-OUT:
+              statements: pass
+        vrfs:
+          customer_a:
+            name: CUSTOMER_A
+            description: Customer A IPv4 L3VPN
+            interfaces:
+              - GigabitEthernet0/0/0/2.101
+            address_families:
+              - afi: ipv4
+                safi: unicast
+                import_config:
+                  route_target: 64521:101
+                export:
+                  route_target: 64521:101
+            bgp:
+              rd: 198.19.2.1:101
+              address_families:
+                - afi: ipv4
+                  safi: unicast
+                  networks:
+                    - network: 10.0.10.0/24
+              neighbors:
+                - neighbor: 192.168.2.2
+                  remote_as: 64530
+                  address_families:
+                    - afi: ipv4
+                      safi: unicast
+                      route_policy:
+                        inbound: EBGP-CE-IN
+                        outbound: EBGP-CE-OUT
+        l3_interfaces:
+          - name: GigabitEthernet0/0/0/2.101
+            ipv4:
+              - address: 192.168.2.1/30
 ```
 
 `iosxr_vrf` uses `iosxr_vrf_global`, `iosxr_vrf_address_family`, and
@@ -202,6 +221,7 @@ schema, so a custom `bgp.rd` uses a narrow `iosxr_config` command. It also uses
 `iosxr_config` for BGP-VRF SRv6 `segment-routing srv6`, locator, and allocation
 mode because those fields are not in the resource-module schema. Per-VRF SRv6
 requires global SRv6 enabled, a defined locator, and `allocation_mode: per-vrf`.
+SRv6 is an optional service extension; it is not required for an MPLS L3VPN.
 
 Per-VRF `bgp.neighbors` configures sessions with `iosxr_bgp_global` and nested
 neighbor AFs with `iosxr_bgp_neighbor_address_family`, both scoped to the
@@ -213,10 +233,35 @@ Referenced route policies must already exist or be defined in root
 `configuration.bgp.route_policies`. An accept-all policy is suitable for lab
 testing, not a production filtering policy.
 
-The standalone [customer VRF service example](examples/vrf-service-model.yaml)
-is not loaded into IX-POP inventory. `tests/vrfs.yaml` renders the collection
-resource modules and checks the CLI fallback offline; no VRF or SRv6 customer
-service has been applied to IX-POP.
+For an IPv4 VPN, activate `vpnv4 unicast` under the PE's global BGP process;
+use `vpnv6 unicast` when carrying IPv6 VPN routes. Under each customer VRF,
+`address_families` configures the VRF's import/export route targets, while
+`bgp.address_families` activates and configures BGP in that VRF. These lists
+serve different purposes. Use the same route target on PEs that should import
+and export the same VPN routes, and give each PE's VRF a distinct RD so their
+VPN routes remain distinguishable. Route-target filtering and route-policy
+filtering are separate controls.
+
+The `interfaces` list assigns existing IOS-XR interfaces to the VRF; model
+their IP addresses separately under `l3_interfaces`, using the same interface
+name. The example assumes the PE-CE attachment already exists; interface
+creation and Layer 2 subinterface encapsulation are outside this VRF model. A
+PE-CE neighbor must be reachable in that VRF and use the CE's actual AS and
+address. A modeled `networks` entry is originated only when the matching prefix
+is present in the VRF routing table. Peer route policies are referenced by
+name from the neighbor AF and must be defined under root BGP
+`route_policies`. The example's `pass` policies accept all routes for rendering
+and lab use only; replace them with explicit production policy.
+
+An optional VRF `name` overrides the stable map key for IOS-XR configuration;
+without it, the map key is used. VRF and BGP address-family lists replace
+inherited lists rather than merging by AF. The standalone
+[customer VRF service example](examples/vrf-service-model.yaml) includes an
+optional SRv6 per-VRF extension and is not loaded into IX-POP inventory.
+`tests/vrfs.yaml` renders the collection resource modules and checks CLI
+fallbacks offline. No customer L3VPN or SRv6 service has been applied to a live
+device, so PE-CE session establishment, VPN route exchange, and end-to-end
+route isolation still require topology validation.
 
 ## NTP
 

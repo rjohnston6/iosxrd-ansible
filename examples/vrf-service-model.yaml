@@ -36,6 +36,8 @@ iosxr:
                 - afi: ipv4
                   safi: unicast
                   additional_paths: send
+                  networks:
+                    - network: 10.0.10.0/24
                   srv6:
                     locator: MAIN_LOCATOR
                     allocation_mode: per-vrf
@@ -48,6 +50,10 @@ iosxr:
                       route_policy:
                         inbound: EBGP-ACCEPT-ALL
                         outbound: EBGP-ACCEPT-ALL
+        l3_interfaces:
+          - name: GigabitEthernet0/0/0/0.101
+            ipv4:
+              - address: 192.168.2.1/30
 
 global_as: 64521
 customer:
