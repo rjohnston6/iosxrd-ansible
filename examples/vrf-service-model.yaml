@@ -6,6 +6,9 @@ iosxr:
         bgp:
           enabled: true
           as_number: "{{ global_as }}"
+          route_policies:
+            EBGP-ACCEPT-ALL:
+              statements: pass
           address_families:
             - afi: vpnv4
               safi: unicast
@@ -36,6 +39,15 @@ iosxr:
                   srv6:
                     locator: MAIN_LOCATOR
                     allocation_mode: per-vrf
+              neighbors:
+                - neighbor: 192.168.2.2
+                  remote_as: 64530
+                  address_families:
+                    - afi: ipv4
+                      safi: unicast
+                      route_policy:
+                        inbound: EBGP-ACCEPT-ALL
+                        outbound: EBGP-ACCEPT-ALL
 
 global_as: 64521
 customer:

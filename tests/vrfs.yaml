@@ -96,3 +96,50 @@
           value: "{{ vrf_test_configuration.vrfs.customer_a }}"
         vrf_test_bgp_service_rendered: >-
           {{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/iosxr_bgp/templates/vrf_service.j2') }}
+
+    - name: Render modeled customer eBGP neighbor through role tasks
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/vrf_neighbors.yaml
+      vars:
+        iosxr_bgp_model:
+          as_number: 64521
+        iosxr_bgp_vrf_name: bhe_10001
+        iosxr_bgp_vrf_neighbor_state: rendered
+        iosxr_bgp_vrf:
+          key: bhe-customer
+          value:
+            name: bhe_10001
+            bgp:
+              neighbors:
+                - neighbor: 192.168.2.2
+                  remote_as: 64530
+                  address_families:
+                    - afi: ipv4
+                      safi: unicast
+                      route_policy:
+                        inbound: EBGP-ACCEPT-ALL
+                        outbound: EBGP-ACCEPT-ALL
+
+    - name: Verify customer eBGP session and policies are scoped to the router-facing VRF name
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_vrf_neighbors_result.rendered == ['router bgp 64521', 'vrf bhe_10001', 'neighbor 192.168.2.2', 'remote-as 64530']
+          - >-
+            iosxr_bgp_vrf_neighbor_address_families_result.rendered ==
+            ['router bgp 64521', 'vrf bhe_10001', 'neighbor 192.168.2.2',
+             'address-family ipv4 unicast', 'route-policy EBGP-ACCEPT-ALL in', 'route-policy EBGP-ACCEPT-ALL out']
+
+    - name: Process a subsequent VRF with no neighbors
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/vrf_neighbors.yaml
+      vars:
+        iosxr_bgp_vrf:
+          key: no_peers
+          value:
+            bgp: {}
+
+    - name: Verify neighbor state does not leak between VRFs
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_vrf_neighbors == []
+          - iosxr_bgp_vrf_neighbor_address_families == []
+          - iosxr_bgp_vrf_neighbors_result is skipped
+          - iosxr_bgp_vrf_neighbor_address_families_result is skipped

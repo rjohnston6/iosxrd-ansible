@@ -1,0 +1,68 @@
+---
+- name: Initialize normalized BGP VRF neighbors
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_neighbors: []
+    iosxr_bgp_vrf_neighbor_address_families: []
+
+- name: Validate BGP VRF neighbor aliases
+  ansible.builtin.assert:
+    that:
+      - iosxr_bgp_vrf_neighbor is mapping
+      - iosxr_bgp_vrf_neighbor.neighbor is defined or iosxr_bgp_vrf_neighbor.neighbor_address is defined
+      - not (iosxr_bgp_vrf_neighbor.neighbor is defined and iosxr_bgp_vrf_neighbor.neighbor_address is defined)
+      - not (iosxr_bgp_vrf_neighbor.address_families is defined and iosxr_bgp_vrf_neighbor.address_family is defined)
+    fail_msg: Use one neighbor address field and one address-family list per BGP VRF neighbor.
+  loop: "{{ iosxr_bgp_vrf.value.bgp.neighbors | default([]) }}"
+  loop_control:
+    loop_var: iosxr_bgp_vrf_neighbor
+
+- name: Normalize BGP VRF neighbor sessions
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_neighbors: >-
+      {{ iosxr_bgp_vrf_neighbors + [
+           (iosxr_bgp_vrf_neighbor | dict2items
+            | rejectattr('key', 'in', ['neighbor', 'address_families', 'address_family']) | items2dict)
+           | combine({'neighbor_address': iosxr_bgp_vrf_neighbor.neighbor
+                      | default(iosxr_bgp_vrf_neighbor.neighbor_address)})
+         ] }}
+  loop: "{{ iosxr_bgp_vrf.value.bgp.neighbors | default([]) }}"
+  loop_control:
+    loop_var: iosxr_bgp_vrf_neighbor
+
+- name: Normalize BGP VRF neighbor address families
+  ansible.builtin.set_fact:
+    iosxr_bgp_vrf_neighbor_address_families: >-
+      {{ iosxr_bgp_vrf_neighbor_address_families + [{
+           'neighbor_address': iosxr_bgp_vrf_neighbor.neighbor
+             | default(iosxr_bgp_vrf_neighbor.neighbor_address),
+           'address_family': iosxr_bgp_vrf_neighbor.address_families
+             | default(iosxr_bgp_vrf_neighbor.address_family | default([]))
+         }] }}
+  loop: "{{ iosxr_bgp_vrf.value.bgp.neighbors | default([]) }}"
+  loop_control:
+    loop_var: iosxr_bgp_vrf_neighbor
+  when: >-
+    iosxr_bgp_vrf_neighbor.address_families
+    | default(iosxr_bgp_vrf_neighbor.address_family | default([])) | length > 0
+
+- name: Configure BGP neighbor sessions under VRF
+  cisco.iosxr.iosxr_bgp_global:
+    config:
+      as_number: "{{ iosxr_bgp_model.as_number }}"
+      vrfs:
+        - vrf: "{{ iosxr_bgp_vrf_name }}"
+          neighbors: "{{ iosxr_bgp_vrf_neighbors }}"
+    state: "{{ iosxr_bgp_vrf_neighbor_state | default('merged') }}"
+  register: iosxr_bgp_vrf_neighbors_result
+  when: iosxr_bgp_vrf_neighbors | length > 0
+
+- name: Configure BGP neighbor address families under VRF
+  cisco.iosxr.iosxr_bgp_neighbor_address_family:
+    config:
+      as_number: "{{ iosxr_bgp_model.as_number }}"
+      vrfs:
+        - vrf: "{{ iosxr_bgp_vrf_name }}"
+          neighbors: "{{ iosxr_bgp_vrf_neighbor_address_families }}"
+    state: "{{ iosxr_bgp_vrf_neighbor_state | default('merged') }}"
+  register: iosxr_bgp_vrf_neighbor_address_families_result
+  when: iosxr_bgp_vrf_neighbor_address_families | length > 0

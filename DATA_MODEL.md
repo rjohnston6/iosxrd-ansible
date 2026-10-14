@@ -178,6 +178,15 @@ vrfs:
           srv6:
             locator: MAIN_LOCATOR
             allocation_mode: per-vrf
+      neighbors:
+        - neighbor: 192.168.2.2
+          remote_as: 64530
+          address_families:
+            - afi: ipv4
+              safi: unicast
+              route_policy:
+                inbound: EBGP-ACCEPT-ALL
+                outbound: EBGP-ACCEPT-ALL
 ```
 
 `iosxr_vrf` uses `iosxr_vrf_global`, `iosxr_vrf_address_family`, and
@@ -193,6 +202,16 @@ schema, so a custom `bgp.rd` uses a narrow `iosxr_config` command. It also uses
 `iosxr_config` for BGP-VRF SRv6 `segment-routing srv6`, locator, and allocation
 mode because those fields are not in the resource-module schema. Per-VRF SRv6
 requires global SRv6 enabled, a defined locator, and `allocation_mode: per-vrf`.
+
+Per-VRF `bgp.neighbors` configures sessions with `iosxr_bgp_global` and nested
+neighbor AFs with `iosxr_bgp_neighbor_address_family`, both scoped to the
+router-facing VRF name. Use `neighbor` for the peer address and
+`address_families` for its AF list; collection aliases `neighbor_address` and
+`address_family` are also accepted, but do not supply both spellings. Session
+fields such as `remote_as` and `description` pass through to the collection.
+Referenced route policies must already exist or be defined in root
+`configuration.bgp.route_policies`. An accept-all policy is suitable for lab
+testing, not a production filtering policy.
 
 The standalone [customer VRF service example](examples/vrf-service-model.yaml)
 is not loaded into IX-POP inventory. `tests/vrfs.yaml` renders the collection

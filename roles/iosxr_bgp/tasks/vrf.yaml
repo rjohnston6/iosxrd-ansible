@@ -46,3 +46,6 @@
       address_family: "{{ iosxr_bgp_vrf_address_families }}"
     state: merged
   when: iosxr_bgp_vrf_address_families | length > 0
+
+- name: Configure BGP VRF neighbors
+  ansible.builtin.include_tasks: vrf_neighbors.yaml
