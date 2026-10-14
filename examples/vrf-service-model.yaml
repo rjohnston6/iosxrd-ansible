@@ -54,6 +54,9 @@ iosxr:
           - name: GigabitEthernet0/0/0/0.101
             ipv4:
               - address: 192.168.2.1/30
+          - name: Loopback0
+            ipv4:
+              - address: "{{ loopback_ipv4 }}/32"
 
 global_as: 64521
 customer:

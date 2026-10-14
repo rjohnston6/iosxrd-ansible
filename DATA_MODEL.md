@@ -206,6 +206,9 @@ iosxr:
           - name: GigabitEthernet0/0/0/2.101
             ipv4:
               - address: 192.168.2.1/30
+          - name: Loopback0
+            ipv4:
+              - address: 198.19.2.1/32
 ```
 
 `iosxr_vrf` uses `iosxr_vrf_global`, `iosxr_vrf_address_family`, and
