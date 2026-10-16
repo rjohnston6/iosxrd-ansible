@@ -1,0 +1,145 @@
+---
+- name: Verify customer VRF resource-module models offline
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_connection: ansible.netcommon.network_cli
+    ansible_network_os: cisco.iosxr.iosxr
+    global_as: 64521
+    customer:
+      name: CUSTOMER_A
+      id: 101
+    loopback_ipv4: 198.19.2.11
+  tasks:
+    - name: Load isolated service-VRF model
+      ansible.builtin.include_vars:
+        file: ../examples/vrf-service-model.yaml
+        name: vrf_test_example
+
+    - name: Select device service model
+      ansible.builtin.set_fact:
+        vrf_test_configuration: "{{ vrf_test_example.iosxr.devices['srv6-pe-11'].configuration }}"
+        iosxr_effective_model:
+          iosxr:
+            devices:
+              configuration: "{{ vrf_test_example.iosxr.devices['srv6-pe-11'].configuration }}"
+
+    - name: Validate VRF model before rendering
+      ansible.builtin.include_tasks: ../roles/iosxr_vrf/tasks/validate.yaml
+      vars:
+        iosxr_vrf_definition:
+          key: customer_a
+          value: "{{ vrf_test_configuration.vrfs.customer_a }}"
+
+    - name: Render VRF definition
+      cisco.iosxr.iosxr_vrf_global:
+        config:
+          - name: "{{ vrf_test_configuration.vrfs.customer_a.name }}"
+            description: "{{ vrf_test_configuration.vrfs.customer_a.description }}"
+        state: rendered
+      register: vrf_test_global_rendered
+
+    - name: Render VRF import and export route targets
+      cisco.iosxr.iosxr_vrf_address_family:
+        config:
+          - name: "{{ vrf_test_configuration.vrfs.customer_a.name }}"
+            address_families: "{{ vrf_test_configuration.vrfs.customer_a.address_families }}"
+        state: rendered
+      register: vrf_test_af_rendered
+
+    - name: Render interface VRF assignment
+      cisco.iosxr.iosxr_vrf_interfaces:
+        config:
+          - name: GigabitEthernet0/0/0/0.101
+            vrf_name: "{{ vrf_test_configuration.vrfs.customer_a.name }}"
+        state: rendered
+      register: vrf_test_interfaces_rendered
+
+    - name: Render BGP VRF address family
+      cisco.iosxr.iosxr_bgp_address_family:
+        config:
+          as_number: "{{ global_as }}"
+          address_family:
+            - afi: ipv4
+              safi: unicast
+              vrf: "{{ vrf_test_configuration.vrfs.customer_a.name }}"
+              additional_paths: send
+        state: rendered
+      register: vrf_test_bgp_af_rendered
+
+    - name: Verify collection modules accept customer VRF model
+      ansible.builtin.assert:
+        that:
+          - "'vrf CUSTOMER_A' in vrf_test_global_rendered.rendered | join(' ')"
+          - "'description CUSTOMER_A IPv4 L3VPN' in vrf_test_global_rendered.rendered | join(' ')"
+          - "'import route-target 64521:101' in vrf_test_af_rendered.rendered | join(' ')"
+          - "'export route-target 64521:101' in vrf_test_af_rendered.rendered | join(' ')"
+          - "'vrf CUSTOMER_A' in vrf_test_interfaces_rendered.rendered | join(' ')"
+          - "'address-family ipv4 unicast' in vrf_test_bgp_af_rendered.rendered | join(' ')"
+          - "'additional-paths send' in vrf_test_bgp_af_rendered.rendered | join(' ')"
+
+    - name: Validate BGP VRF SRv6 reference
+      ansible.builtin.include_tasks: ../roles/iosxr_vrf/tasks/validate_srv6.yaml
+      vars:
+        iosxr_vrf_address_family: "{{ vrf_test_configuration.vrfs.customer_a.bgp.address_families[0] }}"
+
+    - name: Verify BGP VRF service CLI template
+      ansible.builtin.assert:
+        that:
+          - "' rd 198.19.2.11:101' in vrf_test_bgp_service_rendered"
+          - "' segment-routing srv6\n    locator MAIN_LOCATOR\n    alloc mode per-vrf' in vrf_test_bgp_service_rendered"
+      vars:
+        iosxr_bgp_model: "{{ vrf_test_configuration.bgp }}"
+        iosxr_bgp_vrf_name: "{{ vrf_test_configuration.vrfs.customer_a.name }}"
+        iosxr_bgp_vrf:
+          key: customer_a
+          value: "{{ vrf_test_configuration.vrfs.customer_a }}"
+        vrf_test_bgp_service_rendered: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/iosxr_bgp/templates/vrf_service.j2') }}
+
+    - name: Render modeled customer eBGP neighbor through role tasks
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/vrf_neighbors.yaml
+      vars:
+        iosxr_bgp_model:
+          as_number: 64521
+        iosxr_bgp_vrf_name: bhe_10001
+        iosxr_bgp_vrf_neighbor_state: rendered
+        iosxr_bgp_vrf:
+          key: bhe-customer
+          value:
+            name: bhe_10001
+            bgp:
+              neighbors:
+                - neighbor: 192.168.2.2
+                  remote_as: 64530
+                  address_families:
+                    - afi: ipv4
+                      safi: unicast
+                      route_policy:
+                        inbound: EBGP-ACCEPT-ALL
+                        outbound: EBGP-ACCEPT-ALL
+
+    - name: Verify customer eBGP session and policies are scoped to the router-facing VRF name
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_vrf_neighbors_result.rendered == ['router bgp 64521', 'vrf bhe_10001', 'neighbor 192.168.2.2', 'remote-as 64530']
+          - >-
+            iosxr_bgp_vrf_neighbor_address_families_result.rendered ==
+            ['router bgp 64521', 'vrf bhe_10001', 'neighbor 192.168.2.2',
+             'address-family ipv4 unicast', 'route-policy EBGP-ACCEPT-ALL in', 'route-policy EBGP-ACCEPT-ALL out']
+
+    - name: Process a subsequent VRF with no neighbors
+      ansible.builtin.include_tasks: ../roles/iosxr_bgp/tasks/vrf_neighbors.yaml
+      vars:
+        iosxr_bgp_vrf:
+          key: no_peers
+          value:
+            bgp: {}
+
+    - name: Verify neighbor state does not leak between VRFs
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_vrf_neighbors == []
+          - iosxr_bgp_vrf_neighbor_address_families == []
+          - iosxr_bgp_vrf_neighbors_result is skipped
+          - iosxr_bgp_vrf_neighbor_address_families_result is skipped

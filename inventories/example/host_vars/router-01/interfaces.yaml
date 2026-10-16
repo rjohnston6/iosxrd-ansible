@@ -1,0 +1,24 @@
+---
+iosxr:
+  devices:
+    router-01:
+      configuration:
+        interfaces:
+          - name: GigabitEthernet0/0/0/1
+            description: << To peer-router-02 gi0/0/0/2 >>
+            enabled: true
+            mtu: 1500
+          - name: Loopback0
+            description: << Router ID >>
+            enabled: true
+        l3_interfaces:
+          - name: GigabitEthernet0/0/0/1
+            ipv4:
+              - address: 192.0.2.0/31
+            ipv6:
+              - address: 2001:db8:acad::1/64
+          - name: Loopback0
+            ipv4:
+              - address: 192.0.2.10/31
+            ipv6:
+              - address: 2001:db8:acad::10/128

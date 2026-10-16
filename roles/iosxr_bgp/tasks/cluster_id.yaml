@@ -1,0 +1,11 @@
+---
+- name: Configure the modeled BGP route-reflector cluster ID
+  cisco.iosxr.iosxr_config:
+    parents:
+      - "router bgp {{ iosxr_bgp_model.as_number }}"
+    lines:
+      - "bgp cluster-id {{ iosxr_bgp_model.cluster_id }}"
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_model.cluster_id is defined

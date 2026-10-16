@@ -1,0 +1,7 @@
+---
+- name: Check modeled IS-IS interfaces for XRd hello padding
+  ansible.builtin.include_tasks: hello_padding.yaml
+
+- name: Configure IOS-XR IS-IS process
+  cisco.iosxr.iosxr_config:
+    content: "{{ lookup('ansible.builtin.template', 'process.j2') }}"

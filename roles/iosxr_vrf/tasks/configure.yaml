@@ -1,0 +1,26 @@
+---
+- name: Resolve configured VRF name
+  ansible.builtin.set_fact:
+    iosxr_vrf_name: "{{ iosxr_vrf_definition.value.name | default(iosxr_vrf_definition.key) }}"
+
+- name: Create VRF
+  cisco.iosxr.iosxr_vrf_global:
+    config:
+      - name: "{{ iosxr_vrf_name }}"
+        description: "{{ iosxr_vrf_definition.value.description | default(omit) }}"
+    state: merged
+
+- name: Configure VRF address families and route targets
+  cisco.iosxr.iosxr_vrf_address_family:
+    config:
+      - name: "{{ iosxr_vrf_name }}"
+        address_families: "{{ iosxr_vrf_definition.value.address_families }}"
+    state: merged
+  when: iosxr_vrf_definition.value.address_families | default([]) | length > 0
+
+- name: Assign interfaces to VRF
+  ansible.builtin.include_tasks: interface.yaml
+  loop: "{{ iosxr_vrf_definition.value.interfaces | default([]) }}"
+  loop_control:
+    loop_var: iosxr_vrf_interface
+    label: "{{ iosxr_vrf_interface }}"

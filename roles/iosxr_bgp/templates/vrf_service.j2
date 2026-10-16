@@ -1,0 +1,13 @@
+router bgp {{ iosxr_bgp_model.as_number }}
+ vrf {{ iosxr_bgp_vrf_name }}
+{% if iosxr_bgp_vrf.value.bgp.rd is defined %}
+  rd {{ iosxr_bgp_vrf.value.bgp.rd }}
+{% endif %}
+{% for address_family in iosxr_bgp_vrf.value.bgp.address_families | default([]) %}
+{% if address_family.srv6 is defined %}
+  address-family {{ address_family.afi }} {{ address_family.safi | default('unicast') }}
+   segment-routing srv6
+    locator {{ address_family.srv6.locator }}
+    alloc mode {{ address_family.srv6.allocation_mode | default('per-vrf') }}
+{% endif %}
+{% endfor %}

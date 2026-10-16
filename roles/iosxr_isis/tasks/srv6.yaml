@@ -1,0 +1,17 @@
+---
+- name: Validate IS-IS SRv6 advertisement
+  ansible.builtin.assert:
+    that:
+      - iosxr_isis_srv6_family.name in ['ipv6', 'ipv6 unicast']
+      - iosxr_effective_model.iosxr.devices.configuration.srv6.enabled | default(false) | bool
+      - iosxr_isis_srv6_family.srv6.locators is sequence
+      - iosxr_isis_srv6_family.srv6.locators is not string
+      - >-
+        iosxr_isis_srv6_family.srv6.locators | difference(
+          (iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({})).keys() | list) | length == 0
+    fail_msg: IS-IS SRv6 advertisement requires IPv6 unicast and enabled, defined local locators.
+  loop: "{{ iosxr_isis_process.address_families | default([]) }}"
+  loop_control:
+    loop_var: iosxr_isis_srv6_family
+    label: "{{ iosxr_isis_srv6_family.name }}"
+  when: iosxr_isis_srv6_family.srv6.locators | default([]) | length > 0

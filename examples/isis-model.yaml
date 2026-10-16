@@ -1,0 +1,29 @@
+---
+iosxr:
+  device_groups:
+    provider_ix_pop:
+      configuration:
+        isis:
+          enabled: true
+          processes:
+            - name: CORE
+              net: 49.0001.1921.6800.1001.00
+              is_type: level-2-only
+              address_families:
+                - name: ipv4
+                  metric_style: wide
+                - name: ipv6
+                  metric_style: wide
+              interfaces:
+                - name: Loopback0
+                  passive: true
+                  address_families:
+                    - ipv4
+                    - ipv6
+
+                - name: GigabitEthernet0/0/0/1
+                  circuit_type: level-2-only
+                  point_to_point: true
+                  address_families:
+                    - ipv4
+                    - ipv6

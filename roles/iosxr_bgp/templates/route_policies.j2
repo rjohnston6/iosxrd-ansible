@@ -1,0 +1,6 @@
+{% for policy_name, route_policy in iosxr_bgp_model.route_policies | default({}) | dictsort %}
+route-policy {{ policy_name }}
+{{ route_policy.statements | indent(2, true) }}
+end-policy
+!
+{% endfor %}

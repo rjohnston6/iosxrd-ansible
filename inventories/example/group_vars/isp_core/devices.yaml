@@ -1,0 +1,4 @@
+---
+iosxr:
+  devices:
+    router-01: {}

@@ -1,0 +1,11 @@
+---
+- name: Validate BGP VRF SRv6 service settings
+  ansible.builtin.assert:
+    that:
+      - iosxr_effective_model.iosxr.devices.configuration.srv6.enabled | default(false) | bool
+      - iosxr_vrf_address_family.srv6.locator is defined
+      - iosxr_vrf_address_family.srv6.locator in (iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({})).keys() | list
+      - iosxr_vrf_address_family.srv6.allocation_mode | default('per-vrf') == 'per-vrf'
+    fail_msg: >-
+      BGP VRF SRv6 requires enabled local SRv6, a defined locator, and
+      allocation_mode per-vrf.

@@ -1,0 +1,18 @@
+# Python/UV
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ansible
+.ansible/
+*.retry
+ansible-vault-password
+
+# Project Specific
+inventories/local/
+.idea/
+.vscode/
+*.swp
+*.log
+

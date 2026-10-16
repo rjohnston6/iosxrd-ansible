@@ -1,0 +1,8 @@
+---
+all:
+  children:
+    isp_core:
+      hosts:
+        router-01:
+          ansible_host: 192.0.2.1
+          ansible_user: <username>

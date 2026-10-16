@@ -1,0 +1,154 @@
+---
+- name: Verify nonparticipating routers never configure inherited protocols
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    iosxr_effective_model:
+      iosxr:
+        devices:
+          configuration:
+            bgp: "{{ protocol_test_bgp | combine(protocol_test_activation) }}"
+            isis: "{{ protocol_test_isis | combine(protocol_test_activation) }}"
+    iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp }}"
+    protocol_test_isis:
+      processes:
+        - name: CORE
+          net: 49.0001.1921.6800.1001.00
+    protocol_test_bgp:
+      as_number: 64520
+      route_policies:
+        SHARED: {statements: pass}
+      address_families:
+        - afi: ipv4
+          safi: unicast
+        - afi: ipv6
+          safi: unicast
+      neighbor_groups:
+        - name: CORE-V4
+          remote_as: 64520
+          address_families:
+            - afi: ipv4
+              safi: unicast
+              encapsulation_type_srv6: true
+        - name: CORE-V6
+          remote_as: 64520
+          address_families:
+            - afi: ipv6
+              safi: unicast
+      neighbors:
+        - neighbor_address: 192.0.2.1
+          use:
+            neighbor_group: CORE-V4
+        - neighbor_address: 2001:db8::2
+          use:
+            neighbor_group: CORE-V6
+      neighbor_address_families:
+        neighbors:
+          - neighbor_address: 192.0.2.1
+    protocol_test_activation: {}
+  tasks:
+    - name: Run BGP with inherited configuration but no opt-in
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Run IS-IS with inherited processes but no opt-in
+      ansible.builtin.include_role:
+        name: iosxr_isis
+
+    - name: Verify BGP initialization was skipped
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config is undefined
+          - iosxr_bgp_router_id_interfaces is undefined
+          - iosxr_bgp_model.address_families | map(attribute='afi') | list == ['ipv4', 'ipv6']
+          - iosxr_bgp_neighbor_groups | map(attribute='name') | list == ['CORE-V4', 'CORE-V6']
+          - iosxr_bgp_neighbor_groups[0].address_family | map(attribute='afi') | list == ['ipv4']
+          - iosxr_bgp_neighbor_groups[1].address_family | map(attribute='afi') | list == ['ipv6']
+          - "'address_families' not in iosxr_bgp_neighbor_groups[0]"
+          - iosxr_bgp_neighbors | map(attribute='neighbor_address') | list == ['192.0.2.1', '2001:db8::2']
+          - iosxr_bgp_model.neighbor_address_families.neighbors | length == 1
+
+    - name: Provide the legacy collection-oriented BGP fields
+      ansible.builtin.set_fact:
+        protocol_test_bgp:
+          as_number: 64520
+          peer_groups:
+            - name: LEGACY-CORE
+              remote_as: 64520
+              address_family:
+                - afi: ipv4
+                  safi: unicast
+          global:
+            neighbors:
+              - neighbor_address: 192.0.2.3
+                use:
+                  neighbor_group: LEGACY-CORE
+
+    - name: Normalize legacy peer and neighbor fields
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Verify legacy aliases remain supported
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_neighbor_groups | map(attribute='name') | list == ['LEGACY-CORE']
+          - iosxr_bgp_neighbor_groups[0].address_family[0].afi == 'ipv4'
+          - iosxr_bgp_neighbors | map(attribute='neighbor_address') | list == ['192.0.2.3']
+
+    - name: Explicitly disable protocols
+      ansible.builtin.set_fact:
+        protocol_test_activation: {enabled: false}
+
+    - name: Run explicitly disabled BGP
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Run explicitly disabled IS-IS
+      ansible.builtin.include_role:
+        name: iosxr_isis
+
+    - name: Verify explicit disable skipped BGP initialization
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config is undefined
+          - iosxr_bgp_router_id_interfaces is undefined
+
+    - name: Enable BGP with no device configuration tasks required
+      ansible.builtin.set_fact:
+        protocol_test_activation: {enabled: true}
+        protocol_test_bgp: {as_number: 64520}
+
+    - name: Run enabled BGP initialization
+      ansible.builtin.include_role:
+        name: iosxr_bgp
+
+    - name: Verify enabled BGP is not skipped
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_global_config == {}
+          - iosxr_bgp_router_id_interfaces == []
+
+- name: Verify redundant route-reflector model without device access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load isolated route-reflector model
+      ansible.builtin.include_vars:
+        file: ../examples/bgp-route-reflector.yaml
+        name: bgp_rr_example
+
+    - name: Select route-reflector model
+      ansible.builtin.set_fact:
+        iosxr_bgp_model: "{{ bgp_rr_example.iosxr.devices['rr-01'].configuration.bgp }}"
+
+    - name: Verify cluster, AFs, RR-client settings, and non-client RR peer
+      ansible.builtin.assert:
+        that:
+          - iosxr_bgp_model.cluster_id == '1.1.1.1'
+          - iosxr_bgp_model.address_families | map(attribute='afi') | list == ['ipv4', 'vpnv4']
+          - iosxr_bgp_model.neighbor_groups[0].address_families[0].route_reflector_client.set
+          - iosxr_bgp_model.neighbor_groups[0].address_families[0].next_hop_self.set
+          - iosxr_bgp_model.neighbors[0].neighbor_address == '198.19.2.12'
+          - iosxr_bgp_model.neighbor_address_families.neighbors[0].address_family | length == 2

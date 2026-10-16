@@ -1,0 +1,13 @@
+---
+iosxr:
+  devices:
+    router-01:
+      configuration:
+        hostname: router-01
+        banners:
+          - banner: login
+            text: |-
+              @Authorized users only. Unauthorized access is prohibited.@
+          - banner: motd
+            text: |-
+              @Authorized access only. Activity may be monitored.@

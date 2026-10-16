@@ -1,0 +1,19 @@
+---
+- name: Validate SRv6 locator mapping
+  ansible.builtin.assert:
+    that:
+      - iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({}) is mapping
+    fail_msg: SRv6 locators must be a mapping keyed by locator name.
+
+- name: Validate SRv6 locator definitions
+  ansible.builtin.assert:
+    that:
+      - iosxr_srv6_locator.key is match('^[A-Za-z0-9_]+$')
+      - iosxr_srv6_locator.value is mapping
+      - iosxr_srv6_locator.value.prefix is defined
+      - iosxr_srv6_locator.value.prefix | iosxr_ipv6_prefix is string
+    fail_msg: "Locator {{ iosxr_srv6_locator.key }} requires a name and IPv6 CIDR prefix."
+  loop: "{{ iosxr_effective_model.iosxr.devices.configuration.srv6.locators | default({}) | dict2items }}"
+  loop_control:
+    loop_var: iosxr_srv6_locator
+    label: "{{ iosxr_srv6_locator.key }}"

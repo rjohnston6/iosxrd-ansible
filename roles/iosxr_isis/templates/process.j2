@@ -1,0 +1,41 @@
+router isis {{ iosxr_isis_process.name }}
+ is-type {{ iosxr_isis_process.is_type }}
+ net {{ iosxr_isis_process.net }}
+{% for address_family in iosxr_isis_process.address_families | default([]) %}
+{% set family_name = address_family.name %}
+ address-family {{ family_name if ' ' in family_name else family_name ~ ' unicast' }}
+  metric-style {{ address_family.metric_style | default('wide') }}
+{% if address_family.microloop_avoidance | default('') %}
+  microloop avoidance {{ address_family.microloop_avoidance }}
+{% endif %}
+{% if address_family.srv6.locators | default([]) | length > 0 %}
+  segment-routing srv6
+{% for locator_name in address_family.srv6.locators %}
+   locator {{ locator_name }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% for model_interface in iosxr_isis_process.interfaces | default([]) %}
+ interface {{ model_interface.name }}
+{% if model_interface.passive | default(false) | bool %}
+  passive
+{% endif %}
+{% if model_interface.circuit_type is defined %}
+  circuit-type {{ model_interface.circuit_type }}
+{% endif %}
+{% if model_interface.point_to_point | default(false) | bool %}
+  point-to-point
+{% endif %}
+{% if model_interface['hello-padding'] is defined %}
+  hello-padding {{ model_interface['hello-padding'] }}
+{% endif %}
+{% for address_family in model_interface.address_families | default([]) %}
+{% set family_name = address_family.name if address_family is mapping else address_family %}
+  address-family {{ family_name if ' ' in family_name else family_name ~ ' unicast' }}
+{% if address_family is mapping %}
+{% for fast_reroute in address_family['fast-reroute'] | default([]) %}
+   fast-reroute {{ fast_reroute }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}

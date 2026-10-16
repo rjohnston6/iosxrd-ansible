@@ -1,0 +1,17 @@
+---
+- name: Configure IOS-XR devices
+  hosts: "{{ iosxr_target_hosts | default('isp_core') }}"
+  gather_facts: false
+  vars:
+    iosxr_effective_model: "{{ iosxr_model_effective }}"
+    iosxr_bgp_model: "{{ iosxr_effective_model.iosxr.devices.configuration.bgp | default({}) }}"
+  roles:
+    - role: iosxr_model
+      tags: [model]
+    - iosxr_system
+    - iosxr_srv6
+    - iosxr_vrf
+    - iosxr_l3_interfaces
+    - iosxr_ntp
+    - iosxr_isis
+    - iosxr_bgp

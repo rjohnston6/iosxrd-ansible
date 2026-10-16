@@ -1,0 +1,9 @@
+---
+iosxr:
+  global:
+    configuration:
+      bgp:
+        route_policies:
+          EBGP-ACCEPT-ALL:
+            statements: |-
+              pass

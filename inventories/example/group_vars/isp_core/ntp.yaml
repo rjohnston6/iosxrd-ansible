@@ -1,0 +1,9 @@
+---
+iosxr:
+  device_groups:
+    isp_core:
+      configuration:
+        ntp:
+          servers:
+            - server: 192.0.2.100
+              vrf: management

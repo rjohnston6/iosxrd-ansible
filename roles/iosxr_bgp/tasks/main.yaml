@@ -1,0 +1,199 @@
+---
+- name: Validate BGP neighbor model aliases
+  ansible.builtin.assert:
+    that:
+      - not (iosxr_bgp_model.neighbor_groups is defined and iosxr_bgp_model.peer_groups is defined)
+      - not (iosxr_bgp_model.neighbors is defined and (iosxr_bgp_model.global | default({})).neighbors is defined)
+    fail_msg: Use neighbor_groups instead of peer_groups, and define neighbors at one model location only.
+
+- name: Normalize BGP neighbor model fields
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_group_source: "{{ iosxr_bgp_model.neighbor_groups | default(iosxr_bgp_model.peer_groups | default([])) }}"
+    iosxr_bgp_neighbors: >-
+      {{ iosxr_bgp_model.neighbors | default((iosxr_bgp_model.global | default({})).neighbors | default([])) }}
+
+- name: Validate neighbor-group address-family aliases
+  ansible.builtin.assert:
+    that:
+      - iosxr_bgp_neighbor_group is mapping
+      - not (iosxr_bgp_neighbor_group.address_families is defined and iosxr_bgp_neighbor_group.address_family is defined)
+    fail_msg: "Neighbor group {{ iosxr_bgp_neighbor_group.name | default('unknown') }} must use only address_families."
+  loop: "{{ iosxr_bgp_neighbor_group_source }}"
+  loop_control:
+    loop_var: iosxr_bgp_neighbor_group
+    label: "{{ iosxr_bgp_neighbor_group.name | default('unknown') }}"
+
+- name: Initialize normalized BGP neighbor groups
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_groups: []
+
+- name: Normalize neighbor-group address families for IOS-XR collection
+  ansible.builtin.set_fact:
+    iosxr_bgp_neighbor_groups: >-
+      {{ iosxr_bgp_neighbor_groups + [
+           (iosxr_bgp_neighbor_group | dict2items
+            | rejectattr('key', 'equalto', 'address_families') | items2dict)
+           | combine(
+               {'address_family': iosxr_bgp_neighbor_group.address_families}
+               if iosxr_bgp_neighbor_group.address_families is defined else {})
+         ] }}
+  loop: "{{ iosxr_bgp_neighbor_group_source }}"
+  loop_control:
+    loop_var: iosxr_bgp_neighbor_group
+    label: "{{ iosxr_bgp_neighbor_group.name | default('unknown') }}"
+
+- name: Find modeled BGP router ID interface
+  ansible.builtin.set_fact:
+    iosxr_bgp_router_id_interfaces: >-
+      {{
+        iosxr_effective_model.iosxr.devices.configuration.l3_interfaces | default([])
+        | selectattr(
+            'name',
+            'equalto',
+            iosxr_bgp_model.router_id_interface | default('Loopback0'),
+          )
+        | list
+      }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+
+- name: Warn when the BGP router ID interface has no modeled IPv4 address
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: BGP router ID was not configured because modeled interface
+      {{ iosxr_bgp_model.router_id_interface | default('Loopback0') }} has no
+      IPv4 address.
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - >-
+      (iosxr_bgp_router_id_interfaces | length == 0)
+      or
+      (iosxr_bgp_router_id_interfaces[0].ipv4 | default([]) | length == 0)
+
+- name: Derive BGP router ID from the modeled loopback address
+  ansible.builtin.set_fact:
+    iosxr_bgp_router_id: >-
+      {{
+        iosxr_bgp_router_id_interfaces[0].ipv4[0].address
+        | regex_replace('/[0-9]+$', '')
+      }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_router_id_interfaces | length > 0
+    - iosxr_bgp_router_id_interfaces[0].ipv4 | default([]) | length > 0
+
+- name: Initialize IOS-XR BGP global configuration
+  ansible.builtin.set_fact:
+    iosxr_bgp_global_config: >-
+      {{ (iosxr_bgp_model.global | default({}))
+         | combine({'neighbors': iosxr_bgp_neighbors} if iosxr_bgp_model.neighbors is defined else {}, recursive=True) }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+
+- name: Add the derived router ID to IOS-XR BGP global configuration
+  ansible.builtin.set_fact:
+    iosxr_bgp_global_config: >-
+      {{
+        iosxr_bgp_global_config
+        | combine(
+            {
+              'bgp': (iosxr_bgp_global_config.bgp | default({}))
+                | combine({'router_id': iosxr_bgp_router_id})
+            },
+            recursive=True,
+          )
+      }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_router_id is defined
+
+- name: Configure IOS-XR BGP route policies
+  cisco.iosxr.iosxr_config:
+    content: "{{ lookup('ansible.builtin.template', 'route_policies.j2') }}"
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.route_policies | default({}) | length > 0
+
+- name: Enable IOS-XR global BGP address families
+  cisco.iosxr.iosxr_config:
+    parents:
+      - "router bgp {{ iosxr_bgp_model.as_number }}"
+    lines:
+      - "address-family {{ item.afi }} {{ item.safi | default('unicast') }}"
+  loop: "{{ iosxr_bgp_model.address_families | default([]) }}"
+  loop_control:
+    label: "{{ item.afi }} {{ item.safi | default('unicast') }}"
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_model.address_families | default([]) | length > 0
+
+- name: Configure IOS-XR BGP peer groups
+  cisco.iosxr.iosxr_bgp_templates:
+    config:
+      as_number: "{{ iosxr_bgp_model.as_number }}"
+      neighbor: "{{ iosxr_bgp_neighbor_groups }}"
+    state: merged
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_neighbor_groups | length > 0
+
+- name: Configure IOS-XR BGP SRv6 peer-group address families
+  cisco.iosxr.iosxr_config:
+    parents:
+      - "router bgp {{ iosxr_bgp_model.as_number }}"
+      - "neighbor-group {{ iosxr_bgp_peer_family.0.name }}"
+      - "address-family {{ iosxr_bgp_peer_family.1.afi }} {{ iosxr_bgp_peer_family.1.safi }}"
+    lines:
+      - encapsulation-type srv6
+  loop: "{{ iosxr_bgp_neighbor_groups | subelements('address_family', skip_missing=True) }}"
+  loop_control:
+    loop_var: iosxr_bgp_peer_family
+    label: >-
+      {{ iosxr_bgp_peer_family.0.name }} {{ iosxr_bgp_peer_family.1.afi }}
+      {{ iosxr_bgp_peer_family.1.safi }}
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_peer_family.1.encapsulation_type_srv6 | default(false)
+
+- name: Configure IOS-XR BGP process and sessions
+  cisco.iosxr.iosxr_bgp_global:
+    config: "{{ {'as_number': iosxr_bgp_model.as_number} | combine(iosxr_bgp_global_config | default({}), recursive=True) }}"
+    state: merged
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_global_config | default({}) | length > 0
+
+- name: Configure the BGP route-reflector cluster ID
+  ansible.builtin.include_tasks: cluster_id.yaml
+
+- name: Configure IOS-XR BGP address families
+  cisco.iosxr.iosxr_bgp_address_family:
+    config:
+      as_number: "{{ iosxr_bgp_model.as_number }}"
+      address_family: "{{ iosxr_bgp_model.address_families }}"
+    state: merged
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_model.address_families | default([]) | length > 0
+
+- name: Configure BGP VRF address families and SRv6 services
+  ansible.builtin.include_tasks: vrfs.yaml
+
+- name: Configure IOS-XR BGP neighbor address families
+  cisco.iosxr.iosxr_bgp_neighbor_address_family:
+    config: "{{ {'as_number': iosxr_bgp_model.as_number} | combine(iosxr_bgp_model.neighbor_address_families | default({}), recursive=True) }}"
+    state: merged
+  when:
+    - iosxr_bgp_model.enabled | default(false) | bool
+    - iosxr_bgp_model.as_number is defined
+    - iosxr_bgp_model.neighbor_address_families | default({}) | length > 0
