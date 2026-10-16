@@ -547,3 +547,9 @@ Reference: [NetAsCode IOS-XR data models](https://netascode.cisco.com/docs/data_
   gates without device access.
 - `make model-check` resolves the example inventory only; configuration roles
   are excluded by `--tags model`, so it performs no device configuration.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE). It permits use,
+modification, and distribution, subject to retaining the copyright and
+permission notice. The software is provided without warranty.
